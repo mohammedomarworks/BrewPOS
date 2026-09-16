@@ -18,59 +18,10 @@ const categories = [
   "Desserts",
 ];
 
-const products = [
-  {
-    id: 1,
-    name: "Cappuccino",
-    category: "Hot Coffee",
-    price: 180,
-  },
-  {
-    id: 2,
-    name: "Americano",
-    category: "Hot Coffee",
-    price: 150,
-  },
-  {
-    id: 3,
-    name: "Caffe Latte",
-    category: "Hot Coffee",
-    price: 190,
-  },
-  {
-    id: 4,
-    name: "Mocha",
-    category: "Hot Coffee",
-    price: 210,
-  },
-  {
-    id: 5,
-    name: "Iced Latte",
-    category: "Cold Coffee",
-    price: 220,
-  },
-  {
-    id: 6,
-    name: "Cold Brew",
-    category: "Cold Coffee",
-    price: 240,
-  },
-  {
-    id: 7,
-    name: "Butter Croissant",
-    category: "Bakery",
-    price: 140,
-  },
-  {
-    id: 8,
-    name: "Blueberry Muffin",
-    category: "Bakery",
-    price: 160,
-  },
-];
+import { products } from "@/data/products";
+import type { Product } from "@/data/products";
 
-type CartItem = (typeof products)[number] & {
-  quantity: number;
+type CartItem = Product & {  quantity: number;
 };
 
 export default function POSPage() {
@@ -92,8 +43,7 @@ export default function POSPage() {
     });
   }, [selectedCategory, search]);
 
-  const addToCart = (product: (typeof products)[number]) => {
-    setCart((currentCart) => {
+const addToCart = (product: Product) => {    setCart((currentCart) => {
       const existingItem = currentCart.find(
         (item) => item.id === product.id,
       );
