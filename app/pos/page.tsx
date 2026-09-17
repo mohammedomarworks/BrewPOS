@@ -6,6 +6,11 @@ import {
   Minus,
   Trash2,
   ShoppingCart,
+  Store,
+  ShoppingBag,
+  Truck,
+  UserRound,
+  Percent,
 } from "lucide-react";
 import { useMemo, useState } from "react";
 
@@ -20,15 +25,37 @@ const categories = [
 
 import { products } from "@/data/products";
 import type { Product } from "@/data/products";
-
-type CartItem = Product & {  quantity: number;
-};
+import CheckoutModal from "@/components/pos/CheckoutModal";
+import type { CartItem, OrderType, CompletedOrder } from "@/types/pos";
 
 export default function POSPage() {
   const [selectedCategory, setSelectedCategory] = useState("All Items");
   const [search, setSearch] = useState("");
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [orderType, setOrderType] = useState<OrderType>("Take Away");
+  const [customer, setCustomer] = useState("Walk-in Customer");
+  const [discountPercent, setDiscountPercent] = useState(0);
 
+  const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
+  const [orderCounter, setOrderCounter] = useState(1);
+  const [, setCompletedOrders] = useState<CompletedOrder[]>([]);
+
+  const currentOrderNumber = useMemo(() => {
+    return `COF-2026-${String(orderCounter).padStart(5, "0")}`;
+  }, [orderCounter]);
+
+  const handleCompleteOrder = (order: CompletedOrder) => {
+    setCompletedOrders((prev) => [order, ...prev]);
+    setOrderCounter((prev) => prev + 1);
+  };
+
+  const handleNewOrder = () => {
+    setCart([]);
+    setDiscountPercent(0);
+    setOrderType("Take Away");
+    setCustomer("Walk-in Customer");
+    setIsCheckoutOpen(false);
+  };
   const filteredProducts = useMemo(() => {
     return products.filter((product) => {
       const matchesCategory =
@@ -43,10 +70,9 @@ export default function POSPage() {
     });
   }, [selectedCategory, search]);
 
-const addToCart = (product: Product) => {    setCart((currentCart) => {
-      const existingItem = currentCart.find(
-        (item) => item.id === product.id,
-      );
+  const addToCart = (product: Product) => {
+    setCart((currentCart) => {
+      const existingItem = currentCart.find((item) => item.id === product.id);
 
       if (existingItem) {
         return currentCart.map((item) =>
@@ -63,9 +89,7 @@ const addToCart = (product: Product) => {    setCart((currentCart) => {
   const increaseQuantity = (id: number) => {
     setCart((currentCart) =>
       currentCart.map((item) =>
-        item.id === id
-          ? { ...item, quantity: item.quantity + 1 }
-          : item,
+        item.id === id ? { ...item, quantity: item.quantity + 1 } : item,
       ),
     );
   };
@@ -74,18 +98,14 @@ const addToCart = (product: Product) => {    setCart((currentCart) => {
     setCart((currentCart) =>
       currentCart
         .map((item) =>
-          item.id === id
-            ? { ...item, quantity: item.quantity - 1 }
-            : item,
+          item.id === id ? { ...item, quantity: item.quantity - 1 } : item,
         )
         .filter((item) => item.quantity > 0),
     );
   };
 
   const removeFromCart = (id: number) => {
-    setCart((currentCart) =>
-      currentCart.filter((item) => item.id !== id),
-    );
+    setCart((currentCart) => currentCart.filter((item) => item.id !== id));
   };
 
   const subtotal = cart.reduce(
@@ -93,7 +113,7 @@ const addToCart = (product: Product) => {    setCart((currentCart) => {
     0,
   );
 
-  const discount = 0;
+  const discount = subtotal * (discountPercent / 100);
   const taxableAmount = subtotal - discount;
   const vat = taxableAmount * 0.15;
   const total = taxableAmount + vat;
@@ -104,9 +124,7 @@ const addToCart = (product: Product) => {    setCart((currentCart) => {
         {/* Header */}
         <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <p className="text-sm font-medium text-[#c98b5b]">
-              BrewPOS
-            </p>
+            <p className="text-sm font-medium text-[#c98b5b]">BrewPOS</p>
 
             <h1 className="mt-1 text-2xl font-semibold text-[#2b1b12]">
               Point of Sale
@@ -206,9 +224,7 @@ const addToCart = (product: Product) => {    setCart((currentCart) => {
 
             {filteredProducts.length === 0 && (
               <div className="rounded-2xl border border-dashed border-[#d8cabc] bg-white p-12 text-center">
-                <p className="font-medium text-[#2b1b12]">
-                  No products found
-                </p>
+                <p className="font-medium text-[#2b1b12]">No products found</p>
 
                 <p className="mt-1 text-sm text-[#8c7a6c]">
                   Try another category or search term.
@@ -219,14 +235,75 @@ const addToCart = (product: Product) => {    setCart((currentCart) => {
 
           {/* Cart */}
           <aside className="flex min-h-[600px] flex-col rounded-2xl border border-[#e8dfd4] bg-white p-5">
+            <div className="mb-5 border-b border-[#eee5dc] pb-5">
+              <p className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-[#9b897b]">
+                Order Type
+              </p>
+
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  {
+                    label: "Dine In",
+                    icon: Store,
+                  },
+                  {
+                    label: "Take Away",
+                    icon: ShoppingBag,
+                  },
+                  {
+                    label: "Delivery",
+                    icon: Truck,
+                  },
+                ].map((type) => {
+                  const Icon = type.icon;
+
+                  return (
+                    <button
+                      key={type.label}
+                      onClick={() =>
+                        setOrderType(
+                          type.label as "Dine In" | "Take Away" | "Delivery",
+                        )
+                      }
+                      className={`flex flex-col items-center gap-1.5 rounded-xl px-2 py-3 text-xs font-medium transition ${
+                        orderType === type.label
+                          ? "bg-[#2b1b12] text-white"
+                          : "border border-[#e5dbd0] bg-white text-[#66574d] hover:bg-[#faf7f3]"
+                      }`}
+                    >
+                      <Icon size={17} />
+                      {type.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="mb-5 border-b border-[#eee5dc] pb-5">
+              <div className="mb-3 flex items-center justify-between">
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#9b897b]">
+                  Customer
+                </p>
+
+                <UserRound size={16} className="text-[#9b897b]" />
+              </div>
+
+              <select
+                value={customer}
+                onChange={(event) => setCustomer(event.target.value)}
+                className="h-11 w-full rounded-xl border border-[#e5dbd0] bg-[#faf7f3] px-3 text-sm text-[#2b1b12] outline-none focus:border-[#c98b5b]"
+              >
+                <option>Walk-in Customer</option>
+                <option>Mohammed Omar</option>
+                <option>Shihab Hossain</option>
+                <option>Tamim Mahdi</option>
+              </select>
+            </div>
             <div className="flex items-center justify-between border-b border-[#eee5dc] pb-4">
               <div>
-                <h2 className="font-semibold text-[#2b1b12]">
-                  Current Order
-                </h2>
+                <h2 className="font-semibold text-[#2b1b12]">Current Order</h2>
 
                 <p className="mt-1 text-xs text-[#8c7a6c]">
-                  {cart.length} product{cart.length === 1 ? "" : "s"}
+                  {orderType} · {customer}
                 </p>
               </div>
 
@@ -253,10 +330,7 @@ const addToCart = (product: Product) => {    setCart((currentCart) => {
               ) : (
                 <div className="space-y-4">
                   {cart.map((item) => (
-                    <div
-                      key={item.id}
-                      className="rounded-xl bg-[#faf7f3] p-3"
-                    >
+                    <div key={item.id} className="rounded-xl bg-[#faf7f3] p-3">
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <p className="text-sm font-medium text-[#2b1b12]">
@@ -310,6 +384,31 @@ const addToCart = (product: Product) => {    setCart((currentCart) => {
             {/* Summary */}
             <div className="border-t border-[#eee5dc] pt-4">
               <div className="space-y-2 text-sm">
+                <div className="mb-4">
+                  <div className="mb-3 flex items-center justify-between">
+                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#9b897b]">
+                      Discount
+                    </p>
+
+                    <Percent size={15} className="text-[#9b897b]" />
+                  </div>
+
+                  <div className="grid grid-cols-4 gap-2">
+                    {[0, 5, 10, 15].map((percent) => (
+                      <button
+                        key={percent}
+                        onClick={() => setDiscountPercent(percent)}
+                        className={`rounded-lg px-2 py-2 text-xs font-medium transition ${
+                          discountPercent === percent
+                            ? "bg-[#c98b5b] text-white"
+                            : "bg-[#f4ece4] text-[#6d4730] hover:bg-[#ead8c7]"
+                        }`}
+                      >
+                        {percent}%
+                      </button>
+                    ))}
+                  </div>
+                </div>
                 <div className="flex justify-between text-[#66574d]">
                   <span>Subtotal</span>
                   <span>৳{subtotal.toFixed(2)}</span>
@@ -328,9 +427,7 @@ const addToCart = (product: Product) => {    setCart((currentCart) => {
                 <div className="my-3 border-t border-dashed border-[#ddd0c4]" />
 
                 <div className="flex items-center justify-between">
-                  <span className="font-semibold text-[#2b1b12]">
-                    Total
-                  </span>
+                  <span className="font-semibold text-[#2b1b12]">Total</span>
 
                   <span className="text-xl font-bold text-[#6d4730]">
                     ৳{total.toFixed(2)}
@@ -340,6 +437,7 @@ const addToCart = (product: Product) => {    setCart((currentCart) => {
 
               <button
                 disabled={cart.length === 0}
+                onClick={() => setIsCheckoutOpen(true)}
                 className="mt-5 w-full rounded-xl bg-[#2b1b12] px-4 py-3.5 text-sm font-semibold text-white transition hover:bg-[#40291d] disabled:cursor-not-allowed disabled:opacity-40"
               >
                 Proceed to Checkout
@@ -348,6 +446,26 @@ const addToCart = (product: Product) => {    setCart((currentCart) => {
           </aside>
         </div>
       </div>
+
+      {/* Checkout & Payment Modal */}
+      {isCheckoutOpen && (
+        <CheckoutModal
+          isOpen={isCheckoutOpen}
+          onClose={() => setIsCheckoutOpen(false)}
+          cart={cart}
+          orderType={orderType}
+          customer={customer}
+          discountPercent={discountPercent}
+          subtotal={subtotal}
+          discount={discount}
+          taxableAmount={taxableAmount}
+          vat={vat}
+          total={total}
+          orderNumber={currentOrderNumber}
+          onCompleteOrder={handleCompleteOrder}
+          onNewOrder={handleNewOrder}
+        />
+      )}
     </div>
   );
 }
