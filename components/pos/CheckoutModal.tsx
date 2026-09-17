@@ -22,6 +22,8 @@ import {
 import type { CartItem, OrderType, PaymentMethod, CompletedOrder } from "@/types/pos";
 import Receipt from "@/components/pos/Receipt";
 import { addOrder } from "@/lib/orders";
+import { deductStockForOrder, checkCartStock } from "@/lib/recipes";
+import { useInventoryStore } from "@/lib/inventory-store";
 
 interface CheckoutModalProps {
   isOpen: boolean;
@@ -83,6 +85,13 @@ export default function CheckoutModal({
   const [copiedOrderNo, setCopiedOrderNo] = useState<boolean>(false);
   const [showReceiptPreview, setShowReceiptPreview] = useState<boolean>(false);
 
+  // Live Inventory Stock Validation
+  const { ingredients } = useInventoryStore();
+  const stockValidation = useMemo(
+    () => checkCartStock(cart, ingredients),
+    [cart, ingredients]
+  );
+
   // Cash calculation
   const numericReceived = parseFloat(amountReceived) || 0;
   const isCashSufficient = numericReceived >= total;
@@ -122,6 +131,10 @@ export default function CheckoutModal({
   };
 
   const handleConfirmPayment = () => {
+    if (!stockValidation.canFulfill) {
+      return;
+    }
+
     if (paymentMethod === "cash" && !isCashSufficient) {
       return;
     }
@@ -159,6 +172,7 @@ export default function CheckoutModal({
       };
 
       addOrder(order);
+      deductStockForOrder(order);
       setCompletedOrder(order);
       onCompleteOrder(order);
       setIsProcessing(false);
@@ -540,12 +554,41 @@ export default function CheckoutModal({
                 )}
               </div>
 
+              {/* Stock Deficit Warning */}
+              {!stockValidation.canFulfill && (
+                <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3.5 text-xs text-red-800">
+                  <div className="flex items-center gap-2 font-semibold text-red-900">
+                    <AlertCircle size={15} />
+                    <span>Insufficient Ingredient Stock</span>
+                  </div>
+                  <p className="mt-1 text-red-700">
+                    Cannot complete payment. The following ingredients do not have enough stock:
+                  </p>
+                  <ul className="mt-1.5 list-disc space-y-1 pl-4 text-red-800">
+                    {stockValidation.deficits.map((d, i) => (
+                      <li key={i}>
+                        <span className="font-semibold">{d.ingredientName}</span>: requires{" "}
+                        <span className="font-bold">
+                          {d.required} {d.unit}
+                        </span>
+                        , but only{" "}
+                        <span className="font-bold">
+                          {d.available} {d.unit}
+                        </span>{" "}
+                        available (for {d.productName})
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
               {/* Confirmation Action Button */}
               <div className="mt-6 border-t border-[#eee5dc] pt-5">
                 <button
                   type="button"
                   disabled={
                     isProcessing ||
+                    !stockValidation.canFulfill ||
                     (paymentMethod === "cash" && !isCashSufficient)
                   }
                   onClick={handleConfirmPayment}
@@ -556,6 +599,8 @@ export default function CheckoutModal({
                       <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
                       Processing Payment...
                     </span>
+                  ) : !stockValidation.canFulfill ? (
+                    "Insufficient Stock to Complete Sale"
                   ) : paymentMethod === "cash" ? (
                     `Complete Cash Payment (৳${total.toFixed(2)})`
                   ) : paymentMethod === "card" ? (

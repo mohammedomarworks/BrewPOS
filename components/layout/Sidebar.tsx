@@ -44,6 +44,7 @@ const menuItems = [
   {
     label: "Inventory",
     icon: Package,
+    href: "/inventory",
   },
   {
     label: "Discounts",

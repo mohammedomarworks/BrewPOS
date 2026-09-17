@@ -16,6 +16,8 @@ import {
   LayoutDashboard,
   Coffee,
   Users,
+  Boxes,
+  AlertTriangle,
 } from "lucide-react";
 import { useMemo, useState } from "react";
 
@@ -26,11 +28,14 @@ import type { CartItem, OrderType } from "@/types/pos";
 import { getNextOrderNumber } from "@/lib/orders";
 import { useProductsStore, useCategoriesStore } from "@/lib/products";
 import { useCustomersStore } from "@/lib/customers";
+import { useInventoryStore } from "@/lib/inventory-store";
+import { checkProductStock, checkCartStock } from "@/lib/recipes";
 
 export default function POSPage() {
   const { products } = useProductsStore();
   const { categories: categoryList } = useCategoriesStore();
   const { customers, addCustomer } = useCustomersStore();
+  const { ingredients } = useInventoryStore();
 
   const categories = useMemo(() => {
     const activeList = categoryList.filter((c) => c.active).map((c) => c.name);
@@ -53,7 +58,13 @@ export default function POSPage() {
   const [isQuickCustomerOpen, setIsQuickCustomerOpen] = useState(false);
   const [currentOrderNumber, setCurrentOrderNumber] = useState("COF-2026-00001");
 
+  const cartStock = useMemo(
+    () => checkCartStock(cart, ingredients),
+    [cart, ingredients]
+  );
+
   const handleOpenCheckout = () => {
+    if (!cartStock.canFulfill) return;
     setCurrentOrderNumber(getNextOrderNumber());
     setIsCheckoutOpen(true);
   };
@@ -85,7 +96,8 @@ export default function POSPage() {
   }, [products, selectedCategory, search]);
 
   const addToCart = (product: Product) => {
-    if (product.available === false) return;
+    const stockCheck = checkProductStock(product.id, 1, ingredients);
+    if (product.available === false || !stockCheck.canFulfill) return;
 
     setCart((currentCart) => {
       const existingItem = currentCart.find((item) => item.id === product.id);
@@ -175,6 +187,14 @@ export default function POSPage() {
                   <Users size={13} />
                   Customers
                 </Link>
+                <span className="text-[#cbb8a8]">/</span>
+                <Link
+                  href="/inventory"
+                  className="flex items-center gap-1 rounded-md px-2 py-0.5 text-[#8c7a6c] transition hover:bg-[#efe2d5] hover:text-[#2b1b12]"
+                >
+                  <Boxes size={13} />
+                  Inventory
+                </Link>
               </div>
             </div>
 
@@ -242,7 +262,8 @@ export default function POSPage() {
 
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {filteredProducts.map((product) => {
-                const isAvailable = product.available !== false;
+                const stockCheck = checkProductStock(product.id, 1, ingredients);
+                const isAvailable = product.available !== false && stockCheck.canFulfill;
 
                 return (
                   <button
@@ -258,8 +279,17 @@ export default function POSPage() {
                     <div className="relative flex aspect-[4/3] items-center justify-center rounded-xl bg-[#efe2d5] text-4xl">
                       {product.image || "☕"}
                       {!isAvailable && (
-                        <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-black/45 text-xs font-bold uppercase tracking-wider text-white backdrop-blur-[1px]">
-                          Out of Stock
+                        <div className="absolute inset-0 flex flex-col items-center justify-center rounded-xl bg-black/55 p-2 text-center text-xs font-bold uppercase tracking-wider text-white backdrop-blur-[1px]">
+                          <span>
+                            {product.available === false
+                              ? "Unavailable"
+                              : "Out of Stock"}
+                          </span>
+                          {product.available !== false && !stockCheck.canFulfill && stockCheck.missingIngredients[0] && (
+                            <span className="mt-1 text-[10px] font-normal lowercase tracking-normal text-amber-200">
+                              Low {stockCheck.missingIngredients[0].ingredientName}
+                            </span>
+                          )}
                         </div>
                       )}
                     </div>
@@ -294,9 +324,13 @@ export default function POSPage() {
                           <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#f4ece4] text-[#6d4730] transition group-hover:bg-[#c98b5b] group-hover:text-white">
                             <Plus size={17} />
                           </span>
+                        ) : product.available === false ? (
+                          <span className="rounded-md bg-stone-200 px-2 py-0.5 text-[11px] font-semibold text-stone-700">
+                            Unavailable
+                          </span>
                         ) : (
                           <span className="rounded-md bg-red-100 px-2 py-0.5 text-[11px] font-semibold text-red-700">
-                            Unavailable
+                            Out of Stock
                           </span>
                         )}
                       </div>
@@ -543,12 +577,27 @@ export default function POSPage() {
                 </div>
               </div>
 
+              {/* Cart Stock Warning */}
+              {cart.length > 0 && !cartStock.canFulfill && (
+                <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-2.5 text-xs text-red-800">
+                  <div className="flex items-center gap-1.5 font-semibold text-red-900">
+                    <AlertTriangle size={14} />
+                    <span>Insufficient Ingredient Stock</span>
+                  </div>
+                  <p className="mt-1 text-[11px] text-red-700">
+                    Some items in your cart exceed available inventory. Adjust quantities before checking out.
+                  </p>
+                </div>
+              )}
+
               <button
-                disabled={cart.length === 0}
+                disabled={cart.length === 0 || !cartStock.canFulfill}
                 onClick={handleOpenCheckout}
                 className="mt-5 w-full rounded-xl bg-[#2b1b12] px-4 py-3.5 text-sm font-semibold text-white transition hover:bg-[#40291d] disabled:cursor-not-allowed disabled:opacity-40"
               >
-                Proceed to Checkout
+                {!cartStock.canFulfill && cart.length > 0
+                  ? "Stock Insufficient for Cart"
+                  : "Proceed to Checkout"}
               </button>
             </div>
           </aside>
