@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import Sidebar from "@/components/layout/Sidebar";
 import Topbar from "@/components/layout/Topbar";
+import SkeletonTable from "@/components/ui/SkeletonTable";
 import DiscountModal from "@/components/discounts/DiscountModal";
 import DiscountDetailsModal from "@/components/discounts/DiscountDetailsModal";
 import DeleteDiscountModal from "@/components/discounts/DeleteDiscountModal";
@@ -31,6 +32,7 @@ import {
 } from "@/lib/discounts";
 import { useProductsStore, useCategoriesStore } from "@/lib/products";
 import { useOrdersStore } from "@/lib/orders";
+import { useSettingsStore, formatCurrency } from "@/lib/settings-store";
 import type {
   Discount,
   DiscountInput,
@@ -55,6 +57,7 @@ function getStatusBadgeStyle(status: DiscountStatus) {
 export default function DiscountsPage() {
   const {
     discounts,
+    isLoaded,
     addDiscount,
     updateDiscount,
     toggleDiscount,
@@ -65,6 +68,8 @@ export default function DiscountsPage() {
   const { orders } = useOrdersStore();
   const { products } = useProductsStore();
   const { categories } = useCategoriesStore();
+  const { settings } = useSettingsStore();
+  const currencySymbol = settings.taxCurrency.currencySymbol || "৳";
 
   // Total discount given derived reactively from orders store
   const totalDiscountGiven = useMemo(
@@ -305,7 +310,7 @@ export default function DiscountsPage() {
                 </div>
               </div>
               <p className="mt-2 text-2xl font-black text-[#2b1b12]">
-                ৳{totalDiscountGiven.toFixed(2)}
+                {formatCurrency(totalDiscountGiven)}
               </p>
               <p className="mt-0.5 text-[11px] text-[#8c7a6c]">
                 Across all completed sales
@@ -385,7 +390,7 @@ export default function DiscountsPage() {
                 >
                   <option value="All">All Types</option>
                   <option value="Percentage">Percentage (%)</option>
-                  <option value="Fixed Amount">Fixed Amount (৳)</option>
+                  <option value="Fixed Amount">Fixed Amount ({currencySymbol})</option>
                 </select>
               </div>
 
@@ -412,7 +417,13 @@ export default function DiscountsPage() {
 
           {/* Table & Cards List */}
           <div className="overflow-hidden rounded-2xl border border-[#eee5dc] bg-white shadow-xs">
-            <div className="overflow-x-auto">
+            {!isLoaded ? (
+              <div className="p-4">
+                <SkeletonTable rows={5} columns={8} />
+              </div>
+            ) : (
+              <>
+                <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead className="border-b border-[#eee5dc] bg-[#faf7f3] text-[11px] font-semibold uppercase tracking-wider text-[#9b897b]">
                   <tr>
@@ -484,7 +495,7 @@ export default function DiscountsPage() {
                             </span>
                           ) : (
                             <span className="rounded-md bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-800 border border-emerald-200">
-                              ৳{d.value.toFixed(2)} OFF
+                              {formatCurrency(d.value)} OFF
                             </span>
                           )}
                         </td>
@@ -662,9 +673,11 @@ export default function DiscountsPage() {
                 </div>
               </div>
             )}
-          </div>
+            </>
+          )}
         </div>
-      </main>
+      </div>
+    </main>
 
       {/* Add / Edit Modal */}
       {isModalOpen && (

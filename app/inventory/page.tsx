@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import Sidebar from "@/components/layout/Sidebar";
 import Topbar from "@/components/layout/Topbar";
+import SkeletonTable from "@/components/ui/SkeletonTable";
 import IngredientModal from "@/components/inventory/IngredientModal";
 import StockAdjustmentModal from "@/components/inventory/StockAdjustmentModal";
 import ReceiveStockModal from "@/components/inventory/ReceiveStockModal";
@@ -33,6 +34,7 @@ import {
 } from "@/lib/inventory";
 import { useRecipesStore } from "@/lib/recipes";
 import { useProductsStore } from "@/lib/products";
+import { formatCurrency } from "@/lib/settings-store";
 import type {
   Ingredient,
   IngredientInput,
@@ -55,6 +57,7 @@ function getStatusBadge(status: StockStatus) {
 export default function InventoryPage() {
   const {
     ingredients,
+    isLoaded,
     addIngredient,
     updateIngredient,
     deleteIngredient,
@@ -340,7 +343,7 @@ export default function InventoryPage() {
                 </span>
               </div>
               <h3 className="mt-2 text-2xl font-bold text-[#6d4730]">
-                ৳{metrics.totalValue.toFixed(2)}
+                {formatCurrency(metrics.totalValue)}
               </h3>
               <p className="mt-1 text-[11px] text-[#9b897b]">Current stock valuation</p>
             </div>
@@ -449,8 +452,12 @@ export default function InventoryPage() {
               </div>
             </div>
 
-            {/* Empty States */}
-            {ingredients.length === 0 ? (
+            {/* Empty States / Loading */}
+            {!isLoaded ? (
+              <div className="p-4">
+                <SkeletonTable rows={5} columns={6} />
+              </div>
+            ) : ingredients.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
                 <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[#f4ece4] text-[#9f8068]">
                   <Package size={32} strokeWidth={1.8} />
@@ -563,12 +570,12 @@ export default function InventoryPage() {
 
                           {/* Cost / Unit */}
                           <td className="px-5 py-4 text-right text-xs font-medium text-[#2b1b12]">
-                            ৳{ing.costPerUnit.toFixed(2)}
+                            {formatCurrency(ing.costPerUnit)}
                           </td>
 
                           {/* Stock Value */}
                           <td className="px-5 py-4 text-right text-xs font-bold text-[#6d4730]">
-                            ৳{stockValue.toFixed(2)}
+                            {formatCurrency(stockValue)}
                           </td>
 
                           {/* Status */}

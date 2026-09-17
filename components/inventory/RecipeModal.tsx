@@ -13,6 +13,8 @@ import {
 } from "lucide-react";
 import type { Ingredient, ProductRecipe, RecipeIngredient } from "@/types/inventory";
 import type { Product } from "@/data/products";
+import { formatCurrency } from "@/lib/settings-store";
+import { useModalEscape } from "@/lib/use-modal-escape";
 
 interface RecipeModalProps {
   isOpen: boolean;
@@ -51,6 +53,8 @@ export default function RecipeModal({
   const [newIngredientId, setNewIngredientId] = useState<string>("");
   const [newQuantity, setNewQuantity] = useState<string>("");
   const [error, setError] = useState<string>("");
+
+  useModalEscape(isOpen, onClose);
 
   if (!isOpen) return null;
 
@@ -120,7 +124,12 @@ export default function RecipeModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/60 p-4 backdrop-blur-xs transition-opacity">
-      <div className="relative w-full max-w-2xl overflow-hidden rounded-3xl border border-[#e8dfd4] bg-white shadow-2xl transition-all">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="recipe-modal-title"
+        className="relative w-full max-w-2xl overflow-hidden rounded-3xl border border-[#e8dfd4] bg-white shadow-2xl transition-all"
+      >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[#eee5dc] bg-[#faf7f3] px-6 py-4">
           <div className="flex items-center gap-3">
@@ -128,7 +137,7 @@ export default function RecipeModal({
               <ChefHat size={18} />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-[#2b1b12]">
+              <h2 id="recipe-modal-title" className="text-lg font-bold text-[#2b1b12]">
                 Recipe & Bill of Materials (BOM)
               </h2>
               <p className="text-xs text-[#8c7a6c]">
@@ -140,6 +149,7 @@ export default function RecipeModal({
           <button
             type="button"
             onClick={onClose}
+            aria-label="Close modal"
             className="flex h-9 w-9 items-center justify-center rounded-xl border border-[#e5dbd0] bg-white text-[#8c7a6c] transition hover:bg-[#f4ece4] hover:text-[#2b1b12]"
           >
             <X size={18} />
@@ -164,7 +174,7 @@ export default function RecipeModal({
                   const hasRec = recipes.some((r) => r.productId === prod.id && r.ingredients.length > 0);
                   return (
                     <option key={prod.id} value={prod.id}>
-                      {prod.image || "☕"} {prod.name} ({prod.category}) — ৳{prod.price.toFixed(2)}{" "}
+                      {prod.image || "☕"} {prod.name} ({prod.category}) — {formatCurrency(prod.price)}{" "}
                       {hasRec ? "✓ Configured" : "— No Recipe"}
                     </option>
                   );
@@ -183,7 +193,7 @@ export default function RecipeModal({
                 <div>
                   <h3 className="font-bold text-[#2b1b12]">{selectedProduct.name}</h3>
                   <p className="text-xs text-[#8c7a6c]">
-                    Menu Price: <span className="font-semibold text-[#2b1b12]">৳{selectedProduct.price.toFixed(2)}</span>
+                    Menu Price: <span className="font-semibold text-[#2b1b12]">{formatCurrency(selectedProduct.price)}</span>
                   </p>
                 </div>
               </div>
@@ -191,7 +201,7 @@ export default function RecipeModal({
               <div className="text-right">
                 <p className="text-[11px] text-[#8c7a6c]">Estimated Cost of Goods (COGS)</p>
                 <p className="text-lg font-bold text-[#6d4730]">
-                  ৳{estimatedCost.toFixed(2)}
+                  {formatCurrency(estimatedCost)}
                 </p>
                 {selectedProduct.price > 0 && (
                   <p className="text-[11px] font-medium text-emerald-700">
@@ -264,7 +274,7 @@ export default function RecipeModal({
                           </td>
 
                           <td className="px-4 py-2.5 text-right font-medium text-[#6d4730]">
-                            ৳{costContrib.toFixed(2)}
+                            {formatCurrency(costContrib)}
                           </td>
 
                           <td className="px-4 py-2.5 text-right">
@@ -303,7 +313,7 @@ export default function RecipeModal({
                   <option value="">-- Choose Ingredient --</option>
                   {availableIngredients.map((ing) => (
                     <option key={ing.id} value={ing.id}>
-                      {ing.name} ({ing.unit}) — ৳{ing.costPerUnit.toFixed(2)}/unit
+                      {ing.name} ({ing.unit}) — {formatCurrency(ing.costPerUnit)}/unit
                     </option>
                   ))}
                 </select>

@@ -2,6 +2,7 @@ import type { CompletedOrder, OrderStatus, OrderType, PaymentMethod } from "@/ty
 import type { Ingredient, StockTransaction } from "@/types/inventory";
 import type { Customer } from "@/types/customer";
 import type { Category } from "@/data/products";
+import { getCurrencySymbol } from "@/lib/settings-store";
 
 // ============================================================================
 // Types
@@ -171,22 +172,24 @@ export interface PeriodHighlights {
 // Formatting Utilities
 // ============================================================================
 
-export function formatCurrency(amount: number): string {
+export function formatCurrency(amount: number, symbolOverride?: string): string {
+  const symbol = symbolOverride ?? getCurrencySymbol();
   const rounded = Math.round(amount * 100) / 100;
-  return `৳${rounded.toLocaleString("en-US", {
+  return `${symbol}${rounded.toLocaleString("en-US", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;
 }
 
-export function formatCurrencyShort(amount: number): string {
+export function formatCurrencyShort(amount: number, symbolOverride?: string): string {
+  const symbol = symbolOverride ?? getCurrencySymbol();
   if (amount >= 1000000) {
-    return `৳${(amount / 1000000).toFixed(1)}M`;
+    return `${symbol}${(amount / 1000000).toFixed(1)}M`;
   }
   if (amount >= 1000) {
-    return `৳${(amount / 1000).toFixed(1)}k`;
+    return `${symbol}${(amount / 1000).toFixed(1)}k`;
   }
-  return `৳${amount.toFixed(0)}`;
+  return `${symbol}${amount.toFixed(0)}`;
 }
 
 export function formatPercent(rate: number): string {

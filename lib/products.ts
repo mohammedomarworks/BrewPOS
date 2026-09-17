@@ -1,6 +1,6 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { useSyncExternalStore, useEffect } from "react";
 import { products as initialProducts, initialCategories } from "@/data/products";
 import type { Product, Category } from "@/data/products";
 
@@ -10,78 +10,134 @@ const CATEGORIES_STORAGE_KEY = "brewpos_categories_v1";
 const PRODUCTS_EVENT = "brewpos:products-updated";
 const CATEGORIES_EVENT = "brewpos:categories-updated";
 
-/**
- * Retrieve all products from localStorage (or fallback to initial seed).
- */
-export function getProducts(): Product[] {
-  if (typeof window === "undefined") {
-    return initialProducts;
-  }
+// Module snapshot cache & listeners
+let productsSnapshot: Product[] = initialProducts;
+let isProductsHydrated = false;
+let lastSavedProductsRaw: string | null = null;
+const productSubscribers = new Set<() => void>();
 
-  try {
-    const raw = localStorage.getItem(PRODUCTS_STORAGE_KEY);
-    if (!raw) {
-      // First-time seed
-      localStorage.setItem(PRODUCTS_STORAGE_KEY, JSON.stringify(initialProducts));
-      return initialProducts;
-    }
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed) && parsed.length > 0) {
-      return parsed;
-    }
-    // If empty array was explicitly set, return it; otherwise fallback
-    return Array.isArray(parsed) ? parsed : initialProducts;
-  } catch (error) {
-    console.error("Failed to read products from localStorage:", error);
-    return initialProducts;
+function notifyProductsSubscribers() {
+  for (const cb of productSubscribers) {
+    cb();
+  }
+}
+
+let categoriesSnapshot: Category[] = initialCategories;
+let isCategoriesHydrated = false;
+let lastSavedCategoriesRaw: string | null = null;
+const categorySubscribers = new Set<() => void>();
+
+function notifyCategorySubscribers() {
+  for (const cb of categorySubscribers) {
+    cb();
   }
 }
 
 /**
- * Persist products array and broadcast change.
+ * Hydrate products from localStorage. Pure and safe from SSR hydration mismatch.
+ */
+export function hydrateProducts(): void {
+  if (typeof window === "undefined" || isProductsHydrated) return;
+  isProductsHydrated = true;
+
+  try {
+    const raw = localStorage.getItem(PRODUCTS_STORAGE_KEY);
+    if (!raw) {
+      lastSavedProductsRaw = null;
+      productsSnapshot = initialProducts;
+      return;
+    }
+    lastSavedProductsRaw = raw;
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      productsSnapshot = parsed;
+      notifyProductsSubscribers();
+    }
+  } catch (error) {
+    console.warn("Failed to read products from localStorage, falling back to initial data:", error);
+    productsSnapshot = initialProducts;
+  }
+}
+
+/**
+ * Hydrate categories from localStorage. Pure and safe from SSR hydration mismatch.
+ */
+export function hydrateCategories(): void {
+  if (typeof window === "undefined" || isCategoriesHydrated) return;
+  isCategoriesHydrated = true;
+
+  try {
+    const raw = localStorage.getItem(CATEGORIES_STORAGE_KEY);
+    if (!raw) {
+      lastSavedCategoriesRaw = null;
+      categoriesSnapshot = initialCategories;
+      return;
+    }
+    lastSavedCategoriesRaw = raw;
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      categoriesSnapshot = parsed;
+      notifyCategorySubscribers();
+    }
+  } catch (error) {
+    console.warn("Failed to read categories from localStorage, falling back to initial data:", error);
+    categoriesSnapshot = initialCategories;
+  }
+}
+
+/**
+ * Retrieve all products from snapshot (hydrating if called in client).
+ */
+export function getProducts(): Product[] {
+  if (typeof window !== "undefined" && !isProductsHydrated) {
+    hydrateProducts();
+  }
+  return productsSnapshot;
+}
+
+/**
+ * Persist products array, update snapshot, and broadcast change.
  */
 export function saveProducts(products: Product[]): void {
+  productsSnapshot = products;
+  isProductsHydrated = true;
   if (typeof window === "undefined") return;
 
   try {
-    localStorage.setItem(PRODUCTS_STORAGE_KEY, JSON.stringify(products));
+    const raw = JSON.stringify(products);
+    lastSavedProductsRaw = raw;
+    localStorage.setItem(PRODUCTS_STORAGE_KEY, raw);
     window.dispatchEvent(new CustomEvent(PRODUCTS_EVENT));
+    notifyProductsSubscribers();
   } catch (error) {
     console.error("Failed to save products to localStorage:", error);
   }
 }
 
 /**
- * Retrieve all categories from localStorage (or fallback to initial seed).
+ * Retrieve all categories from snapshot (hydrating if called in client).
  */
 export function getCategories(): Category[] {
-  if (typeof window === "undefined") {
-    return initialCategories;
+  if (typeof window !== "undefined" && !isCategoriesHydrated) {
+    hydrateCategories();
   }
-
-  try {
-    const raw = localStorage.getItem(CATEGORIES_STORAGE_KEY);
-    if (!raw) {
-      localStorage.setItem(CATEGORIES_STORAGE_KEY, JSON.stringify(initialCategories));
-      return initialCategories;
-    }
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : initialCategories;
-  } catch (error) {
-    console.error("Failed to read categories from localStorage:", error);
-    return initialCategories;
-  }
+  return categoriesSnapshot;
 }
 
 /**
- * Persist categories array and broadcast change.
+ * Persist categories array, update snapshot, and broadcast change.
  */
 export function saveCategories(categories: Category[]): void {
+  categoriesSnapshot = categories;
+  isCategoriesHydrated = true;
   if (typeof window === "undefined") return;
 
   try {
-    localStorage.setItem(CATEGORIES_STORAGE_KEY, JSON.stringify(categories));
+    const raw = JSON.stringify(categories);
+    lastSavedCategoriesRaw = raw;
+    localStorage.setItem(CATEGORIES_STORAGE_KEY, raw);
     window.dispatchEvent(new CustomEvent(CATEGORIES_EVENT));
+    notifyCategorySubscribers();
   } catch (error) {
     console.error("Failed to save categories to localStorage:", error);
   }
@@ -360,40 +416,47 @@ export function toggleCategoryActive(id: string): boolean {
 // React useSyncExternalStore Hooks for real-time reactivity
 // ----------------------------------------------------------------------
 
-let cachedProducts: Product[] = [];
-let cachedProductsRaw: string | null = null;
-
 function subscribeProducts(callback: () => void) {
-  if (typeof window === "undefined") return () => {};
+  productSubscribers.add(callback);
+  if (typeof window !== "undefined") {
+    const handleSync = (e?: StorageEvent | Event) => {
+      if (e && "key" in e && e.key !== PRODUCTS_STORAGE_KEY) return;
+      try {
+        const raw = localStorage.getItem(PRODUCTS_STORAGE_KEY);
+        if (!raw) return;
+        if (raw !== lastSavedProductsRaw) {
+          lastSavedProductsRaw = raw;
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) {
+            productsSnapshot = parsed;
+            notifyProductsSubscribers();
+          }
+        }
+      } catch (err) {
+        console.warn("Failed to sync products from storage:", err);
+      }
+    };
 
-  window.addEventListener(PRODUCTS_EVENT, callback);
-  window.addEventListener("storage", callback);
+    window.addEventListener(PRODUCTS_EVENT, handleSync);
+    window.addEventListener("storage", handleSync);
+    queueMicrotask(() => {
+      hydrateProducts();
+    });
+
+    return () => {
+      productSubscribers.delete(callback);
+      window.removeEventListener(PRODUCTS_EVENT, handleSync);
+      window.removeEventListener("storage", handleSync);
+    };
+  }
 
   return () => {
-    window.removeEventListener(PRODUCTS_EVENT, callback);
-    window.removeEventListener("storage", callback);
+    productSubscribers.delete(callback);
   };
 }
 
 function getProductsSnapshot(): Product[] {
-  if (typeof window === "undefined") return initialProducts;
-
-  try {
-    const raw = localStorage.getItem(PRODUCTS_STORAGE_KEY);
-    if (!raw) {
-      localStorage.setItem(PRODUCTS_STORAGE_KEY, JSON.stringify(initialProducts));
-      cachedProducts = initialProducts;
-      cachedProductsRaw = JSON.stringify(initialProducts);
-      return cachedProducts;
-    }
-    if (raw !== cachedProductsRaw) {
-      cachedProductsRaw = raw;
-      cachedProducts = JSON.parse(raw);
-    }
-    return cachedProducts;
-  } catch {
-    return initialProducts;
-  }
+  return productsSnapshot;
 }
 
 function getProductsServerSnapshot(): Product[] {
@@ -407,8 +470,13 @@ export function useProductsStore() {
     getProductsServerSnapshot
   );
 
+  useEffect(() => {
+    hydrateProducts();
+  }, []);
+
   return {
     products,
+    isLoaded: isProductsHydrated,
     addProduct,
     updateProduct,
     deleteProduct,
@@ -419,40 +487,47 @@ export function useProductsStore() {
   };
 }
 
-let cachedCategories: Category[] = [];
-let cachedCategoriesRaw: string | null = null;
-
 function subscribeCategories(callback: () => void) {
-  if (typeof window === "undefined") return () => {};
+  categorySubscribers.add(callback);
+  if (typeof window !== "undefined") {
+    const handleSync = (e?: StorageEvent | Event) => {
+      if (e && "key" in e && e.key !== CATEGORIES_STORAGE_KEY) return;
+      try {
+        const raw = localStorage.getItem(CATEGORIES_STORAGE_KEY);
+        if (!raw) return;
+        if (raw !== lastSavedCategoriesRaw) {
+          lastSavedCategoriesRaw = raw;
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) {
+            categoriesSnapshot = parsed;
+            notifyCategorySubscribers();
+          }
+        }
+      } catch (err) {
+        console.warn("Failed to sync categories from storage:", err);
+      }
+    };
 
-  window.addEventListener(CATEGORIES_EVENT, callback);
-  window.addEventListener("storage", callback);
+    window.addEventListener(CATEGORIES_EVENT, handleSync);
+    window.addEventListener("storage", handleSync);
+    queueMicrotask(() => {
+      hydrateCategories();
+    });
+
+    return () => {
+      categorySubscribers.delete(callback);
+      window.removeEventListener(CATEGORIES_EVENT, handleSync);
+      window.removeEventListener("storage", handleSync);
+    };
+  }
 
   return () => {
-    window.removeEventListener(CATEGORIES_EVENT, callback);
-    window.removeEventListener("storage", callback);
+    categorySubscribers.delete(callback);
   };
 }
 
 function getCategoriesSnapshot(): Category[] {
-  if (typeof window === "undefined") return initialCategories;
-
-  try {
-    const raw = localStorage.getItem(CATEGORIES_STORAGE_KEY);
-    if (!raw) {
-      localStorage.setItem(CATEGORIES_STORAGE_KEY, JSON.stringify(initialCategories));
-      cachedCategories = initialCategories;
-      cachedCategoriesRaw = JSON.stringify(initialCategories);
-      return cachedCategories;
-    }
-    if (raw !== cachedCategoriesRaw) {
-      cachedCategoriesRaw = raw;
-      cachedCategories = JSON.parse(raw);
-    }
-    return cachedCategories;
-  } catch {
-    return initialCategories;
-  }
+  return categoriesSnapshot;
 }
 
 function getCategoriesServerSnapshot(): Category[] {
@@ -466,8 +541,13 @@ export function useCategoriesStore() {
     getCategoriesServerSnapshot
   );
 
+  useEffect(() => {
+    hydrateCategories();
+  }, []);
+
   return {
     categories,
+    isLoaded: isCategoriesHydrated,
     addCategory,
     updateCategory,
     deleteCategory,

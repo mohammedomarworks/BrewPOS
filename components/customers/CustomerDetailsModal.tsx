@@ -23,6 +23,8 @@ import {
 import type { Customer, CustomerWithStats } from "@/types/customer";
 import type { CompletedOrder, OrderType } from "@/types/pos";
 import { getStatusBadgeStyle } from "@/components/orders/OrderDetailsModal";
+import { formatCurrency } from "@/lib/settings-store";
+import { useModalEscape } from "@/lib/use-modal-escape";
 
 interface CustomerDetailsModalProps {
   customer: CustomerWithStats | null;
@@ -69,6 +71,8 @@ export default function CustomerDetailsModal({
   onToggleStatus,
   onViewOrder,
 }: CustomerDetailsModalProps) {
+  useModalEscape(isOpen, onClose);
+
   if (!isOpen || !customer) return null;
 
   // Filter orders for this customer
@@ -80,7 +84,12 @@ export default function CustomerDetailsModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/60 p-4 backdrop-blur-xs transition-opacity">
-      <div className="relative w-full max-w-3xl overflow-hidden rounded-3xl border border-[#e8dfd4] bg-white shadow-2xl transition-all">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="customer-details-title"
+        className="relative w-full max-w-3xl overflow-hidden rounded-3xl border border-[#e8dfd4] bg-white shadow-2xl transition-all"
+      >
         {/* Modal Top Header */}
         <div className="flex items-center justify-between border-b border-[#eee5dc] bg-[#faf7f3] px-6 py-4">
           <div className="flex items-center gap-3">
@@ -89,7 +98,7 @@ export default function CustomerDetailsModal({
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-lg font-bold text-[#2b1b12]">{customer.name}</h2>
+                <h2 id="customer-details-title" className="text-lg font-bold text-[#2b1b12]">{customer.name}</h2>
                 <span
                   className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-semibold ${
                     customer.status === "Active"
@@ -140,6 +149,7 @@ export default function CustomerDetailsModal({
             <button
               type="button"
               onClick={onClose}
+              aria-label="Close modal"
               className="flex h-9 w-9 items-center justify-center rounded-xl border border-[#e5dbd0] bg-white text-[#8c7a6c] transition hover:bg-[#f4ece4] hover:text-[#2b1b12]"
             >
               <X size={18} />
@@ -170,7 +180,7 @@ export default function CustomerDetailsModal({
                 <TrendingUp size={14} className="text-[#3b7b46]" />
               </div>
               <p className="mt-1.5 text-xl font-bold text-[#6d4730]">
-                ৳{customer.totalSpent.toFixed(2)}
+                {formatCurrency(customer.totalSpent)}
               </p>
               <p className="text-[11px] text-[#9b897b]">Lifetime spend</p>
             </div>
@@ -182,7 +192,7 @@ export default function CustomerDetailsModal({
                 <ReceiptText size={14} className="text-[#2b1b12]" />
               </div>
               <p className="mt-1.5 text-xl font-bold text-[#2b1b12]">
-                ৳{customer.averageOrderValue.toFixed(2)}
+                {formatCurrency(customer.averageOrderValue)}
               </p>
               <p className="text-[11px] text-[#9b897b]">Per transaction</p>
             </div>
@@ -288,7 +298,7 @@ export default function CustomerDetailsModal({
                           </span>
                         </td>
                         <td className="px-4 py-3 font-bold text-[#6d4730]">
-                          ৳{order.total.toFixed(2)}
+                          {formatCurrency(order.total)}
                         </td>
                         <td className="px-4 py-3">
                           <span

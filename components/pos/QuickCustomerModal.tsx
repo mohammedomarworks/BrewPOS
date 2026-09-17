@@ -4,6 +4,7 @@ import { useState } from "react";
 import { X, User, Phone, Mail, AlertCircle, Check } from "lucide-react";
 import type { Customer, CustomerInput } from "@/types/customer";
 import { isDuplicateCustomer } from "@/lib/customers";
+import { useModalEscape } from "@/lib/use-modal-escape";
 
 interface QuickCustomerModalProps {
   isOpen: boolean;
@@ -22,6 +23,8 @@ export default function QuickCustomerModal({
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  useModalEscape(isOpen, onClose);
 
   if (!isOpen) return null;
 
@@ -71,7 +74,12 @@ export default function QuickCustomerModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/60 p-4 backdrop-blur-xs transition-opacity">
-      <div className="relative w-full max-w-md overflow-hidden rounded-3xl border border-[#e8dfd4] bg-white shadow-2xl transition-all">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="quick-customer-title"
+        className="relative w-full max-w-md overflow-hidden rounded-3xl border border-[#e8dfd4] bg-white shadow-2xl transition-all"
+      >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[#eee5dc] bg-[#faf7f3] px-5 py-4">
           <div className="flex items-center gap-2.5">
@@ -79,7 +87,7 @@ export default function QuickCustomerModal({
               <User size={16} />
             </div>
             <div>
-              <h3 className="text-base font-bold text-[#2b1b12]">
+              <h3 id="quick-customer-title" className="text-base font-bold text-[#2b1b12]">
                 New Customer
               </h3>
               <p className="text-[11px] text-[#8c7a6c]">
@@ -91,6 +99,7 @@ export default function QuickCustomerModal({
           <button
             type="button"
             onClick={onClose}
+            aria-label="Close modal"
             className="flex h-8 w-8 items-center justify-center rounded-xl border border-[#e5dbd0] bg-white text-[#8c7a6c] transition hover:bg-[#f4ece4] hover:text-[#2b1b12]"
           >
             <X size={16} />

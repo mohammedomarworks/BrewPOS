@@ -13,6 +13,7 @@ import {
   EyeOff,
 } from "lucide-react";
 import type { Category, Product } from "@/data/products";
+import { useModalEscape } from "@/lib/use-modal-escape";
 
 interface CategoryModalProps {
   isOpen: boolean;
@@ -44,6 +45,8 @@ export default function CategoryModal({
     type: "error" | "success";
     message: string;
   } | null>(null);
+
+  useModalEscape(isOpen, onClose);
 
   if (!isOpen) return null;
 
@@ -142,7 +145,12 @@ export default function CategoryModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/60 p-4 backdrop-blur-xs transition-opacity">
-      <div className="relative w-full max-w-2xl overflow-hidden rounded-3xl border border-[#e8dfd4] bg-white shadow-2xl transition-all">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="category-modal-title"
+        className="relative w-full max-w-2xl overflow-hidden rounded-3xl border border-[#e8dfd4] bg-white shadow-2xl transition-all"
+      >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[#eee5dc] bg-[#faf7f3] px-6 py-4">
           <div className="flex items-center gap-3">
@@ -150,7 +158,7 @@ export default function CategoryModal({
               <Tags size={20} />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-[#2b1b12]">
+              <h2 id="category-modal-title" className="text-lg font-bold text-[#2b1b12]">
                 Manage Categories
               </h2>
               <p className="text-xs text-[#8c7a6c]">
@@ -162,6 +170,7 @@ export default function CategoryModal({
           <button
             type="button"
             onClick={onClose}
+            aria-label="Close modal"
             className="flex h-9 w-9 items-center justify-center rounded-xl border border-[#e5dbd0] bg-white text-[#8c7a6c] transition hover:bg-[#f4ece4] hover:text-[#2b1b12]"
           >
             <X size={18} />

@@ -4,6 +4,7 @@ import React, { useState, useMemo } from "react";
 import { Download, Printer, BarChart3 } from "lucide-react";
 import Sidebar from "@/components/layout/Sidebar";
 import Topbar from "@/components/layout/Topbar";
+import SkeletonTable from "@/components/ui/SkeletonTable";
 import { useOrdersStore } from "@/lib/orders";
 import { useCategoriesStore } from "@/lib/products";
 import { useCustomersStore } from "@/lib/customers";
@@ -52,7 +53,7 @@ import ReportEmptyState from "@/components/reports/ReportEmptyState";
 
 export default function ReportsPage() {
   // Global Data Stores
-  const { orders } = useOrdersStore();
+  const { orders, isLoaded } = useOrdersStore();
   const { categories } = useCategoriesStore();
   const { customers } = useCustomersStore();
   const { ingredients, getStockTransactions } = useInventoryStore();
@@ -291,13 +292,20 @@ export default function ReportsPage() {
             </span>
           </div>
 
-          {/* Section 3: Main KPI Cards */}
-          <section className="mb-6">
-            <KpiCardGrid summary={salesSummary} />
-          </section>
+          {!isLoaded ? (
+            <div className="space-y-6">
+              <SkeletonTable rows={4} columns={4} />
+              <SkeletonTable rows={5} columns={4} />
+            </div>
+          ) : (
+            <>
+              {/* Section 3: Main KPI Cards */}
+              <section className="mb-6">
+                <KpiCardGrid summary={salesSummary} />
+              </section>
 
-          {/* Empty State vs Full Reports Content */}
-          {!hasMatchingOrders ? (
+              {/* Empty State vs Full Reports Content */}
+              {!hasMatchingOrders ? (
             <div className="space-y-6">
               <ReportEmptyState
                 periodLabel={bounds.label}
@@ -363,6 +371,8 @@ export default function ReportsPage() {
               </section>
             </div>
           )}
+          </>
+        )}
         </main>
       </div>
     </div>

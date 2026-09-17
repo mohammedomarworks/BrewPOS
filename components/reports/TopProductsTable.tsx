@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { ArrowUpDown, Coffee, Award } from "lucide-react";
 import { formatCurrency, formatPercent } from "@/lib/reports";
 import type { TopProductItem } from "@/lib/reports";
+import { getCurrencySymbol } from "@/lib/settings-store";
 
 interface TopProductsTableProps {
   products: TopProductItem[];
@@ -43,7 +44,7 @@ export default function TopProductsTable({ products }: TopProductsTableProps) {
                   : "text-[#6d5b4e] hover:text-[#2b1b12]"
               }`}
             >
-              Revenue (৳)
+              Revenue ({getCurrencySymbol()})
             </button>
             <button
               type="button"
@@ -119,7 +120,7 @@ export default function TopProductsTable({ products }: TopProductsTableProps) {
                         <div>
                           <p className="font-semibold text-[#2b1b12]">{p.name}</p>
                           <p className="text-[10px] text-[#a39284]">
-                            ৳{p.price.toFixed(2)} each
+                            {formatCurrency(p.price)} each
                           </p>
                         </div>
                       </div>

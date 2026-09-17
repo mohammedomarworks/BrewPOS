@@ -9,6 +9,8 @@ import {
 } from "lucide-react";
 import type { Discount, DiscountStatus } from "@/types/discount";
 import type { Product } from "@/data/products";
+import { formatCurrency } from "@/lib/settings-store";
+import { useModalEscape } from "@/lib/use-modal-escape";
 
 interface DiscountDetailsModalProps {
   isOpen: boolean;
@@ -42,6 +44,8 @@ export default function DiscountDetailsModal({
   products,
   onEdit,
 }: DiscountDetailsModalProps) {
+  useModalEscape(isOpen, onClose);
+
   if (!isOpen || !discount) return null;
 
   const targetProducts =
@@ -56,7 +60,12 @@ export default function DiscountDetailsModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/60 p-4 backdrop-blur-xs transition-opacity">
-      <div className="relative w-full max-w-lg overflow-hidden rounded-3xl border border-[#e8dfd4] bg-white shadow-2xl transition-all">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="discount-details-title"
+        className="relative w-full max-w-lg overflow-hidden rounded-3xl border border-[#e8dfd4] bg-white shadow-2xl transition-all"
+      >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[#eee5dc] bg-[#faf7f3] px-6 py-4">
           <div className="flex items-center gap-3">
@@ -65,7 +74,7 @@ export default function DiscountDetailsModal({
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-base font-bold text-[#2b1b12]">
+                <h2 id="discount-details-title" className="text-base font-bold text-[#2b1b12]">
                   {discount.name}
                 </h2>
                 <span
@@ -84,6 +93,7 @@ export default function DiscountDetailsModal({
           <button
             type="button"
             onClick={onClose}
+            aria-label="Close modal"
             className="flex h-9 w-9 items-center justify-center rounded-xl border border-[#e5dbd0] text-[#8c7a6c] transition hover:bg-[#f4ece4] hover:text-[#2b1b12]"
           >
             <X size={18} />
@@ -101,7 +111,7 @@ export default function DiscountDetailsModal({
               <p className="text-2xl font-black text-[#2b1b12]">
                 {discount.type === "Percentage"
                   ? `${discount.value}% OFF`
-                  : `৳${discount.value.toFixed(2)} Flat OFF`}
+                  : `${formatCurrency(discount.value)} Flat OFF`}
               </p>
               {discount.description && (
                 <p className="mt-1 text-xs text-[#66574d]">{discount.description}</p>
@@ -138,7 +148,7 @@ export default function DiscountDetailsModal({
               </span>
               <p className="mt-1 font-semibold text-[#2b1b12]">
                 {discount.minimumOrderAmount
-                  ? `৳${discount.minimumOrderAmount.toFixed(2)}`
+                  ? formatCurrency(discount.minimumOrderAmount)
                   : "None"}
               </p>
             </div>
@@ -149,7 +159,7 @@ export default function DiscountDetailsModal({
               </span>
               <p className="mt-1 font-semibold text-[#2b1b12]">
                 {discount.maximumDiscountAmount
-                  ? `৳${discount.maximumDiscountAmount.toFixed(2)}`
+                  ? formatCurrency(discount.maximumDiscountAmount)
                   : "No limit"}
               </p>
             </div>

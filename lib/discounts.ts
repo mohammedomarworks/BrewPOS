@@ -9,6 +9,7 @@ import type {
   DiscountValidationParams,
 } from "@/types/discount";
 import type { CartItem, CompletedOrder } from "@/types/pos";
+import { getCurrencySymbol } from "@/lib/settings-store";
 
 const DISCOUNTS_STORAGE_KEY = "brewpos_discounts_v1";
 const DISCOUNTS_EVENT = "brewpos:discounts-updated";
@@ -540,11 +541,12 @@ export function validateDiscount(
     discount.minimumOrderAmount > 0 &&
     subtotal < discount.minimumOrderAmount
   ) {
+    const sym = getCurrencySymbol();
     return {
       valid: false,
-      reason: `Minimum order of ৳${discount.minimumOrderAmount.toFixed(
+      reason: `Minimum order of ${sym}${discount.minimumOrderAmount.toFixed(
         2
-      )} required (current: ৳${subtotal.toFixed(2)}).`,
+      )} required (current: ${sym}${subtotal.toFixed(2)}).`,
     };
   }
 
@@ -608,7 +610,7 @@ export function calculateDiscount(
       discountAmount: 0,
       taxableAmount: subtotal,
       vat,
-      total: subtotal + vat,
+      total: Math.round((subtotal + vat) * 100) / 100,
     };
   }
 
@@ -630,7 +632,7 @@ export function calculateDiscount(
       discountAmount: 0,
       taxableAmount: subtotal,
       vat,
-      total: subtotal + vat,
+      total: Math.round((subtotal + vat) * 100) / 100,
     };
   }
 
@@ -663,7 +665,7 @@ export function calculateDiscount(
       discountAmount: 0,
       taxableAmount: subtotal,
       vat,
-      total: subtotal + vat,
+      total: Math.round((subtotal + vat) * 100) / 100,
     };
   }
 
@@ -690,7 +692,7 @@ export function calculateDiscount(
   // VAT Rule: VAT is applied to Taxable Amount (Subtotal - Discount)
   const taxableAmount = Math.max(0, subtotal - discountAmount);
   const vat = Math.round(taxableAmount * vatMultiplier * 100) / 100;
-  const total = taxableAmount + vat;
+  const total = Math.round((taxableAmount + vat) * 100) / 100;
 
   return {
     valid: true,

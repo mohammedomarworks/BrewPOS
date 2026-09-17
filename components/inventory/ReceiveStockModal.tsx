@@ -10,6 +10,8 @@ import {
   Package,
 } from "lucide-react";
 import type { Ingredient } from "@/types/inventory";
+import { useSettingsStore, formatCurrency } from "@/lib/settings-store";
+import { useModalEscape } from "@/lib/use-modal-escape";
 
 interface ReceiveStockModalProps {
   isOpen: boolean;
@@ -32,6 +34,9 @@ export default function ReceiveStockModal({
   initialIngredientId,
   onReceive,
 }: ReceiveStockModalProps) {
+  const { settings } = useSettingsStore();
+  const currencySymbol = settings.taxCurrency.currencySymbol || "৳";
+
   const [selectedId, setSelectedId] = useState<string>(
     initialIngredientId || (ingredients.length > 0 ? ingredients[0].id : "")
   );
@@ -49,6 +54,8 @@ export default function ReceiveStockModal({
     return `PO-${Math.floor(1000 + Math.random() * 9000)}`;
   });
   const [error, setError] = useState<string>("");
+
+  useModalEscape(isOpen, onClose);
 
   if (!isOpen) return null;
 
@@ -97,7 +104,12 @@ export default function ReceiveStockModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/60 p-4 backdrop-blur-xs transition-opacity">
-      <div className="relative w-full max-w-lg overflow-hidden rounded-3xl border border-[#e8dfd4] bg-white shadow-2xl transition-all">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="receive-stock-title"
+        className="relative w-full max-w-lg overflow-hidden rounded-3xl border border-[#e8dfd4] bg-white shadow-2xl transition-all"
+      >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[#eee5dc] bg-[#faf7f3] px-6 py-4">
           <div className="flex items-center gap-3">
@@ -105,7 +117,7 @@ export default function ReceiveStockModal({
               <Truck size={18} />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-[#2b1b12]">Receive Stock</h2>
+              <h2 id="receive-stock-title" className="text-lg font-bold text-[#2b1b12]">Receive Stock</h2>
               <p className="text-xs text-[#8c7a6c]">
                 Record inventory replenishment from suppliers
               </p>
@@ -115,6 +127,7 @@ export default function ReceiveStockModal({
           <button
             type="button"
             onClick={onClose}
+            aria-label="Close modal"
             className="flex h-9 w-9 items-center justify-center rounded-xl border border-[#e5dbd0] bg-white text-[#8c7a6c] transition hover:bg-[#f4ece4] hover:text-[#2b1b12]"
           >
             <X size={18} />
@@ -166,7 +179,7 @@ export default function ReceiveStockModal({
             <div>
               <label className="text-xs font-semibold text-[#2b1b12] flex items-center gap-1">
                 <DollarSign size={12} className="text-[#8c7a6c]" />
-                Cost / Unit (৳)
+                Cost / Unit ({currencySymbol})
               </label>
               <input
                 type="number"
@@ -220,7 +233,7 @@ export default function ReceiveStockModal({
               {numCost > 0 && (
                 <div className="flex justify-between items-center mt-1 text-emerald-800">
                   <span>Total Shipment Value:</span>
-                  <span className="font-bold">৳{totalShipmentCost.toFixed(2)}</span>
+                  <span className="font-bold">{formatCurrency(totalShipmentCost)}</span>
                 </div>
               )}
             </div>

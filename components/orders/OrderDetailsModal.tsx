@@ -18,6 +18,8 @@ import {
 } from "lucide-react";
 import type { CompletedOrder, OrderStatus, OrderType } from "@/types/pos";
 import Receipt from "@/components/pos/Receipt";
+import { formatCurrency } from "@/lib/settings-store";
+import { useModalEscape } from "@/lib/use-modal-escape";
 
 interface OrderDetailsModalProps {
   order: CompletedOrder | null;
@@ -80,6 +82,7 @@ export default function OrderDetailsModal({
   onStatusChange,
 }: OrderDetailsModalProps) {
   const [copied, setCopied] = useState(false);
+  useModalEscape(isOpen, onClose);
 
   if (!isOpen || !order) return null;
 
@@ -106,7 +109,12 @@ export default function OrderDetailsModal({
       <Receipt order={order} variant="print-only" />
 
       {/* Modal Card */}
-      <div className="relative w-full max-w-2xl overflow-hidden rounded-3xl border border-[#e8dfd4] bg-white shadow-2xl transition-all print:hidden">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="order-details-title"
+        className="relative w-full max-w-2xl overflow-hidden rounded-3xl border border-[#e8dfd4] bg-white shadow-2xl transition-all print:hidden"
+      >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[#eee5dc] bg-[#faf7f3] px-6 py-4">
           <div className="flex items-center gap-3">
@@ -115,7 +123,7 @@ export default function OrderDetailsModal({
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-lg font-bold text-[#2b1b12]">Order Details</h2>
+                <h2 id="order-details-title" className="text-lg font-bold text-[#2b1b12]">Order Details</h2>
                 <span className="font-mono text-xs font-semibold text-[#6d4730]">
                   {order.orderNumber}
                 </span>
@@ -123,6 +131,7 @@ export default function OrderDetailsModal({
                   type="button"
                   onClick={handleCopyOrderNumber}
                   title="Copy Order Number"
+                  aria-label="Copy Order Number"
                   className="text-[#9b897b] transition hover:text-[#2b1b12]"
                 >
                   {copied ? (
@@ -140,6 +149,7 @@ export default function OrderDetailsModal({
             <button
               type="button"
               onClick={handlePrint}
+              aria-label="Print receipt"
               className="flex items-center gap-1.5 rounded-xl border border-[#e5dbd0] bg-white px-3 py-2 text-xs font-semibold text-[#66574d] transition hover:bg-[#f4ece4] hover:text-[#2b1b12]"
             >
               <Printer size={15} />
@@ -148,6 +158,7 @@ export default function OrderDetailsModal({
             <button
               type="button"
               onClick={onClose}
+              aria-label="Close modal"
               className="flex h-9 w-9 items-center justify-center rounded-xl border border-[#e5dbd0] bg-white text-[#8c7a6c] transition hover:bg-[#f4ece4] hover:text-[#2b1b12]"
             >
               <X size={18} />
@@ -250,10 +261,10 @@ export default function OrderDetailsModal({
                         {item.quantity}
                       </td>
                       <td className="px-3.5 py-2.5 text-right text-[#66574d]">
-                        ৳{item.price.toFixed(2)}
+                        {formatCurrency(item.price)}
                       </td>
                       <td className="px-3.5 py-2.5 text-right font-semibold text-[#6d4730]">
-                        ৳{(item.price * item.quantity).toFixed(2)}
+                        {formatCurrency(item.price * item.quantity)}
                       </td>
                     </tr>
                   ))}
@@ -281,7 +292,7 @@ export default function OrderDetailsModal({
                 <div className="flex justify-between">
                   <span className="text-[#8c7a6c]">Amount Tendered:</span>
                   <span className="font-semibold text-[#2b1b12]">
-                    ৳{order.payment.amountReceived.toFixed(2)}
+                    {formatCurrency(order.payment.amountReceived)}
                   </span>
                 </div>
 
@@ -289,7 +300,7 @@ export default function OrderDetailsModal({
                   <div className="flex justify-between font-medium text-emerald-700">
                     <span>Change Returned:</span>
                     <span className="font-bold">
-                      ৳{order.payment.change.toFixed(2)}
+                      {formatCurrency(order.payment.change)}
                     </span>
                   </div>
                 )}
@@ -330,7 +341,7 @@ export default function OrderDetailsModal({
                 <div className="flex justify-between text-[#66574d]">
                   <span>Subtotal</span>
                   <span className="font-medium text-[#2b1b12]">
-                    ৳{order.subtotal.toFixed(2)}
+                    {formatCurrency(order.subtotal)}
                   </span>
                 </div>
 
@@ -344,19 +355,21 @@ export default function OrderDetailsModal({
                         ? `(${order.discountPercent}%)`
                         : ""}
                     </span>
-                    <span className="font-semibold">-৳{order.discount.toFixed(2)}</span>
+                    <span className="font-semibold">-{formatCurrency(order.discount)}</span>
                   </div>
                 )}
 
                 <div className="flex justify-between text-[#8c7a6c]">
                   <span>Taxable Amount</span>
-                  <span>৳{order.taxableAmount.toFixed(2)}</span>
+                  <span>{formatCurrency(order.taxableAmount)}</span>
                 </div>
 
                 <div className="flex justify-between text-[#66574d]">
-                  <span>VAT (15%)</span>
+                  <span>
+                    VAT ({order.taxableAmount > 0 ? Math.round((order.vat / order.taxableAmount) * 100) : 15}%)
+                  </span>
                   <span className="font-medium text-[#2b1b12]">
-                    ৳{order.vat.toFixed(2)}
+                    {formatCurrency(order.vat)}
                   </span>
                 </div>
 
@@ -367,7 +380,7 @@ export default function OrderDetailsModal({
                     Grand Total
                   </span>
                   <span className="text-xl font-extrabold text-[#6d4730]">
-                    ৳{order.total.toFixed(2)}
+                    {formatCurrency(order.total)}
                   </span>
                 </div>
               </div>

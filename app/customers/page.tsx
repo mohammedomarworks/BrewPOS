@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import Sidebar from "@/components/layout/Sidebar";
 import Topbar from "@/components/layout/Topbar";
+import SkeletonTable from "@/components/ui/SkeletonTable";
 import CustomerModal from "@/components/customers/CustomerModal";
 import CustomerDetailsModal from "@/components/customers/CustomerDetailsModal";
 import DeleteCustomerModal from "@/components/customers/DeleteCustomerModal";
@@ -26,12 +27,14 @@ import {
   calculateCustomerMetrics,
 } from "@/lib/customers";
 import { useOrdersStore } from "@/lib/orders";
+import { formatCurrency } from "@/lib/settings-store";
 import type { Customer, CustomerInput, CustomerWithStats } from "@/types/customer";
 import type { CompletedOrder, OrderStatus } from "@/types/pos";
 
 export default function CustomersPage() {
   const {
     customers,
+    isLoaded,
     addCustomer,
     updateCustomer,
     deleteCustomer,
@@ -283,7 +286,7 @@ export default function CustomersPage() {
                 </span>
               </div>
               <h3 className="mt-2 text-2xl font-bold text-[#6d4730]">
-                ৳{metrics.totalCustomerSales.toFixed(2)}
+                {formatCurrency(metrics.totalCustomerSales)}
               </h3>
               <p className="mt-1 text-[11px] text-[#9b897b]">From customer orders</p>
             </div>
@@ -360,8 +363,12 @@ export default function CustomersPage() {
               </div>
             </div>
 
-            {/* Empty State: No Customers in Store */}
-            {customers.length === 0 ? (
+            {/* Empty State / Loading */}
+            {!isLoaded ? (
+              <div className="p-4">
+                <SkeletonTable rows={5} columns={6} />
+              </div>
+            ) : customers.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
                 <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[#f4ece4] text-[#9f8068]">
                   <Users size={32} strokeWidth={1.8} />
@@ -463,7 +470,7 @@ export default function CustomersPage() {
 
                         {/* Total Spent */}
                         <td className="px-5 py-4 font-bold text-[#6d4730] whitespace-nowrap">
-                          ৳{c.totalSpent.toFixed(2)}
+                          {formatCurrency(c.totalSpent)}
                         </td>
 
                         {/* Last Order */}

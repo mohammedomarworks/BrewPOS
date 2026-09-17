@@ -20,6 +20,8 @@ import type {
   CustomerEligibility,
 } from "@/types/discount";
 import type { Product, Category } from "@/data/products";
+import { useSettingsStore, formatCurrency } from "@/lib/settings-store";
+import { useModalEscape } from "@/lib/use-modal-escape";
 
 interface DiscountModalProps {
   isOpen: boolean;
@@ -38,6 +40,9 @@ export default function DiscountModal({
   categories,
   onSave,
 }: DiscountModalProps) {
+  const { settings } = useSettingsStore();
+  const currencySymbol = settings.taxCurrency.currencySymbol || "৳";
+
   const isEditing = Boolean(discount);
 
   // Form states initialized from discount prop
@@ -96,6 +101,8 @@ export default function DiscountModal({
   const startId = useId();
   const endId = useId();
   const limitId = useId();
+
+  useModalEscape(isOpen, onClose);
 
   if (!isOpen) return null;
 
@@ -219,7 +226,12 @@ export default function DiscountModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/60 p-4 backdrop-blur-xs transition-opacity">
-      <div className="relative w-full max-w-2xl overflow-hidden rounded-3xl border border-[#e8dfd4] bg-white shadow-2xl transition-all">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="discount-modal-title"
+        className="relative w-full max-w-2xl overflow-hidden rounded-3xl border border-[#e8dfd4] bg-white shadow-2xl transition-all"
+      >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[#eee5dc] bg-[#faf7f3] px-6 py-4">
           <div className="flex items-center gap-3">
@@ -227,7 +239,7 @@ export default function DiscountModal({
               <Tag size={20} />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-[#2b1b12]">
+              <h2 id="discount-modal-title" className="text-lg font-bold text-[#2b1b12]">
                 {isEditing ? "Edit Promotion" : "Create New Promotion"}
               </h2>
               <p className="text-xs text-[#8c7a6c]">
@@ -240,6 +252,7 @@ export default function DiscountModal({
           <button
             type="button"
             onClick={onClose}
+            aria-label="Close modal"
             className="flex h-9 w-9 items-center justify-center rounded-xl border border-[#e5dbd0] text-[#8c7a6c] transition hover:bg-[#f4ece4] hover:text-[#2b1b12]"
           >
             <X size={18} />
@@ -365,7 +378,7 @@ export default function DiscountModal({
                     }`}
                   >
                     <Banknote size={14} />
-                    Fixed Amount (৳)
+                    Fixed Amount ({currencySymbol})
                   </button>
                 </div>
               </div>
@@ -375,12 +388,12 @@ export default function DiscountModal({
                   htmlFor={valId}
                   className="block text-xs font-semibold text-[#2b1b12]"
                 >
-                  {type === "Percentage" ? "Percentage Off (%)" : "Flat Amount Off (৳)"}{" "}
+                  {type === "Percentage" ? "Percentage Off (%)" : `Flat Amount Off (${currencySymbol})`}{" "}
                   <span className="text-red-500">*</span>
                 </label>
                 <div className="relative mt-1.5">
                   <span className="absolute left-3.5 top-1/2 -translate-y-1/2 font-bold text-[#9b897b]">
-                    {type === "Percentage" ? "%" : "৳"}
+                    {type === "Percentage" ? "%" : currencySymbol}
                   </span>
                   <input
                     id={valId}
@@ -410,7 +423,7 @@ export default function DiscountModal({
                   htmlFor={minId}
                   className="block text-xs font-semibold text-[#2b1b12]"
                 >
-                  Minimum Order Subtotal (৳)
+                  Minimum Order Subtotal ({currencySymbol})
                 </label>
                 <input
                   id={minId}
@@ -433,7 +446,7 @@ export default function DiscountModal({
                     htmlFor={maxId}
                     className="block text-xs font-semibold text-[#2b1b12]"
                   >
-                    Maximum Discount Cap (৳)
+                    Maximum Discount Cap ({currencySymbol})
                   </label>
                   <input
                     id={maxId}
@@ -576,7 +589,7 @@ export default function DiscountModal({
                           </div>
                         </div>
                         <span className="font-semibold text-[#6d4730]">
-                          ৳{p.price.toFixed(2)}
+                          {formatCurrency(p.price)}
                         </span>
                       </div>
                     );

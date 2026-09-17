@@ -1,6 +1,6 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { useSyncExternalStore, useEffect } from "react";
 import type {
   Ingredient,
   IngredientInput,
@@ -12,6 +12,17 @@ import type {
 const INVENTORY_STORAGE_KEY = "brewpos_inventory_v1";
 const TRANSACTIONS_STORAGE_KEY = "brewpos_stock_transactions_v1";
 const INVENTORY_EVENT = "brewpos:inventory-updated";
+
+let ingredientsSnapshot: Ingredient[] = [];
+let isInventoryHydrated = false;
+let lastSavedInventoryRaw: string | null = null;
+const inventorySubscribers = new Set<() => void>();
+
+function notifyInventorySubscribers() {
+  for (const cb of inventorySubscribers) {
+    cb();
+  }
+}
 
 export const initialIngredients: Ingredient[] = [
   {
@@ -213,39 +224,55 @@ export const initialIngredients: Ingredient[] = [
 ];
 
 /**
- * Retrieve ingredients from localStorage or fallback to initial seed.
+ * Hydrate ingredients from localStorage safely without SSR mismatch.
  */
-export function getIngredients(): Ingredient[] {
-  if (typeof window === "undefined") {
-    return initialIngredients;
-  }
+export function hydrateInventory(): void {
+  if (typeof window === "undefined" || isInventoryHydrated) return;
+  isInventoryHydrated = true;
 
   try {
     const raw = localStorage.getItem(INVENTORY_STORAGE_KEY);
     if (!raw) {
-      localStorage.setItem(INVENTORY_STORAGE_KEY, JSON.stringify(initialIngredients));
-      return initialIngredients;
+      lastSavedInventoryRaw = null;
+      ingredientsSnapshot = initialIngredients;
+      return;
     }
+    lastSavedInventoryRaw = raw;
     const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed) && parsed.length > 0) {
-      return parsed;
+    if (Array.isArray(parsed)) {
+      ingredientsSnapshot = parsed;
+      notifyInventorySubscribers();
     }
-    return Array.isArray(parsed) ? parsed : initialIngredients;
   } catch (error) {
-    console.error("Failed to read inventory from localStorage:", error);
-    return initialIngredients;
+    console.warn("Failed to read inventory from localStorage, falling back to initial data:", error);
+    ingredientsSnapshot = initialIngredients;
   }
 }
 
 /**
- * Persist ingredients array and broadcast update.
+ * Retrieve ingredients from snapshot (hydrating if called in client).
+ */
+export function getIngredients(): Ingredient[] {
+  if (typeof window !== "undefined" && !isInventoryHydrated) {
+    hydrateInventory();
+  }
+  return ingredientsSnapshot.length > 0 ? ingredientsSnapshot : initialIngredients;
+}
+
+/**
+ * Persist ingredients array, update snapshot, and broadcast update.
  */
 export function saveIngredients(ingredients: Ingredient[]): void {
+  ingredientsSnapshot = ingredients;
+  isInventoryHydrated = true;
   if (typeof window === "undefined") return;
 
   try {
-    localStorage.setItem(INVENTORY_STORAGE_KEY, JSON.stringify(ingredients));
+    const raw = JSON.stringify(ingredients);
+    lastSavedInventoryRaw = raw;
+    localStorage.setItem(INVENTORY_STORAGE_KEY, raw);
     window.dispatchEvent(new CustomEvent(INVENTORY_EVENT));
+    notifyInventorySubscribers();
   } catch (error) {
     console.error("Failed to save inventory to localStorage:", error);
   }
@@ -614,40 +641,47 @@ export function getLowStockIngredients(ingredients: Ingredient[]): Ingredient[] 
 // React useSyncExternalStore Hook for real-time reactivity
 // ----------------------------------------------------------------------
 
-let cachedIngredients: Ingredient[] = [];
-let cachedIngredientsRaw: string | null = null;
-
 function subscribeInventory(callback: () => void) {
-  if (typeof window === "undefined") return () => {};
+  inventorySubscribers.add(callback);
+  if (typeof window !== "undefined") {
+    const handleSync = (e?: StorageEvent | Event) => {
+      if (e && "key" in e && e.key !== INVENTORY_STORAGE_KEY) return;
+      try {
+        const raw = localStorage.getItem(INVENTORY_STORAGE_KEY);
+        if (!raw) return;
+        if (raw !== lastSavedInventoryRaw) {
+          lastSavedInventoryRaw = raw;
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) {
+            ingredientsSnapshot = parsed;
+            notifyInventorySubscribers();
+          }
+        }
+      } catch (err) {
+        console.warn("Failed to sync inventory from storage:", err);
+      }
+    };
 
-  window.addEventListener(INVENTORY_EVENT, callback);
-  window.addEventListener("storage", callback);
+    window.addEventListener(INVENTORY_EVENT, handleSync);
+    window.addEventListener("storage", handleSync);
+    queueMicrotask(() => {
+      hydrateInventory();
+    });
+
+    return () => {
+      inventorySubscribers.delete(callback);
+      window.removeEventListener(INVENTORY_EVENT, handleSync);
+      window.removeEventListener("storage", handleSync);
+    };
+  }
 
   return () => {
-    window.removeEventListener(INVENTORY_EVENT, callback);
-    window.removeEventListener("storage", callback);
+    inventorySubscribers.delete(callback);
   };
 }
 
 function getInventorySnapshot(): Ingredient[] {
-  if (typeof window === "undefined") return initialIngredients;
-
-  try {
-    const raw = localStorage.getItem(INVENTORY_STORAGE_KEY);
-    if (!raw) {
-      localStorage.setItem(INVENTORY_STORAGE_KEY, JSON.stringify(initialIngredients));
-      cachedIngredients = initialIngredients;
-      cachedIngredientsRaw = JSON.stringify(initialIngredients);
-      return cachedIngredients;
-    }
-    if (raw !== cachedIngredientsRaw) {
-      cachedIngredientsRaw = raw;
-      cachedIngredients = JSON.parse(raw);
-    }
-    return cachedIngredients;
-  } catch {
-    return initialIngredients;
-  }
+  return ingredientsSnapshot.length > 0 ? ingredientsSnapshot : initialIngredients;
 }
 
 function getInventoryServerSnapshot(): Ingredient[] {
@@ -661,9 +695,13 @@ export function useInventoryStore() {
     getInventoryServerSnapshot
   );
 
+  useEffect(() => {
+    hydrateInventory();
+  }, []);
+
   return {
     ingredients,
-    isLoaded: true,
+    isLoaded: isInventoryHydrated,
     addIngredient,
     updateIngredient,
     deleteIngredient,

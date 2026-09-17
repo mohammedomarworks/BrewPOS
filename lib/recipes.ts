@@ -1,12 +1,23 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { useSyncExternalStore, useEffect } from "react";
 import type { ProductRecipe, RecipeIngredient, Ingredient } from "@/types/inventory";
 import type { CartItem, CompletedOrder } from "@/types/pos";
 import { getIngredients, adjustStock } from "@/lib/inventory";
 
 const RECIPES_STORAGE_KEY = "brewpos_recipes_v1";
 const RECIPES_EVENT = "brewpos:recipes-updated";
+
+let recipesSnapshot: ProductRecipe[] = [];
+let isRecipesHydrated = false;
+let lastSavedRecipesRaw: string | null = null;
+const recipeSubscribers = new Set<() => void>();
+
+function notifyRecipeSubscribers() {
+  for (const cb of recipeSubscribers) {
+    cb();
+  }
+}
 
 export const initialRecipes: ProductRecipe[] = [
   // 1. Cappuccino
@@ -83,39 +94,55 @@ export const initialRecipes: ProductRecipe[] = [
 ];
 
 /**
- * Retrieve recipes from localStorage or fallback to initial seed.
+ * Hydrate recipes from localStorage safely without SSR mismatch.
  */
-export function getRecipes(): ProductRecipe[] {
-  if (typeof window === "undefined") {
-    return initialRecipes;
-  }
+export function hydrateRecipes(): void {
+  if (typeof window === "undefined" || isRecipesHydrated) return;
+  isRecipesHydrated = true;
 
   try {
     const raw = localStorage.getItem(RECIPES_STORAGE_KEY);
     if (!raw) {
-      localStorage.setItem(RECIPES_STORAGE_KEY, JSON.stringify(initialRecipes));
-      return initialRecipes;
+      lastSavedRecipesRaw = null;
+      recipesSnapshot = initialRecipes;
+      return;
     }
+    lastSavedRecipesRaw = raw;
     const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed) && parsed.length > 0) {
-      return parsed;
+    if (Array.isArray(parsed)) {
+      recipesSnapshot = parsed;
+      notifyRecipeSubscribers();
     }
-    return Array.isArray(parsed) ? parsed : initialRecipes;
   } catch (error) {
-    console.error("Failed to read recipes from localStorage:", error);
-    return initialRecipes;
+    console.warn("Failed to read recipes from localStorage, falling back to initial data:", error);
+    recipesSnapshot = initialRecipes;
   }
 }
 
 /**
- * Persist recipes array and broadcast update.
+ * Retrieve recipes from snapshot (hydrating if called in client).
+ */
+export function getRecipes(): ProductRecipe[] {
+  if (typeof window !== "undefined" && !isRecipesHydrated) {
+    hydrateRecipes();
+  }
+  return recipesSnapshot.length > 0 ? recipesSnapshot : initialRecipes;
+}
+
+/**
+ * Persist recipes array, update snapshot, and broadcast update.
  */
 export function saveRecipes(recipes: ProductRecipe[]): void {
+  recipesSnapshot = recipes;
+  isRecipesHydrated = true;
   if (typeof window === "undefined") return;
 
   try {
-    localStorage.setItem(RECIPES_STORAGE_KEY, JSON.stringify(recipes));
+    const raw = JSON.stringify(recipes);
+    lastSavedRecipesRaw = raw;
+    localStorage.setItem(RECIPES_STORAGE_KEY, raw);
     window.dispatchEvent(new CustomEvent(RECIPES_EVENT));
+    notifyRecipeSubscribers();
   } catch (error) {
     console.error("Failed to save recipes to localStorage:", error);
   }
@@ -356,40 +383,47 @@ export function deductStockForOrder(order: CompletedOrder): {
 // React useSyncExternalStore Hook for real-time reactivity
 // ----------------------------------------------------------------------
 
-let cachedRecipes: ProductRecipe[] = [];
-let cachedRecipesRaw: string | null = null;
-
 function subscribeRecipes(callback: () => void) {
-  if (typeof window === "undefined") return () => {};
+  recipeSubscribers.add(callback);
+  if (typeof window !== "undefined") {
+    const handleSync = (e?: StorageEvent | Event) => {
+      if (e && "key" in e && e.key !== RECIPES_STORAGE_KEY) return;
+      try {
+        const raw = localStorage.getItem(RECIPES_STORAGE_KEY);
+        if (!raw) return;
+        if (raw !== lastSavedRecipesRaw) {
+          lastSavedRecipesRaw = raw;
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) {
+            recipesSnapshot = parsed;
+            notifyRecipeSubscribers();
+          }
+        }
+      } catch (err) {
+        console.warn("Failed to sync recipes from storage:", err);
+      }
+    };
 
-  window.addEventListener(RECIPES_EVENT, callback);
-  window.addEventListener("storage", callback);
+    window.addEventListener(RECIPES_EVENT, handleSync);
+    window.addEventListener("storage", handleSync);
+    queueMicrotask(() => {
+      hydrateRecipes();
+    });
+
+    return () => {
+      recipeSubscribers.delete(callback);
+      window.removeEventListener(RECIPES_EVENT, handleSync);
+      window.removeEventListener("storage", handleSync);
+    };
+  }
 
   return () => {
-    window.removeEventListener(RECIPES_EVENT, callback);
-    window.removeEventListener("storage", callback);
+    recipeSubscribers.delete(callback);
   };
 }
 
 function getRecipesSnapshot(): ProductRecipe[] {
-  if (typeof window === "undefined") return initialRecipes;
-
-  try {
-    const raw = localStorage.getItem(RECIPES_STORAGE_KEY);
-    if (!raw) {
-      localStorage.setItem(RECIPES_STORAGE_KEY, JSON.stringify(initialRecipes));
-      cachedRecipes = initialRecipes;
-      cachedRecipesRaw = JSON.stringify(initialRecipes);
-      return cachedRecipes;
-    }
-    if (raw !== cachedRecipesRaw) {
-      cachedRecipesRaw = raw;
-      cachedRecipes = JSON.parse(raw);
-    }
-    return cachedRecipes;
-  } catch {
-    return initialRecipes;
-  }
+  return recipesSnapshot.length > 0 ? recipesSnapshot : initialRecipes;
 }
 
 function getRecipesServerSnapshot(): ProductRecipe[] {
@@ -403,9 +437,13 @@ export function useRecipesStore() {
     getRecipesServerSnapshot
   );
 
+  useEffect(() => {
+    hydrateRecipes();
+  }, []);
+
   return {
     recipes,
-    isLoaded: true,
+    isLoaded: isRecipesHydrated,
     getRecipeByProductId,
     saveRecipe,
     deleteRecipe,

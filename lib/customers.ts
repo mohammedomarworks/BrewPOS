@@ -1,6 +1,6 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { useSyncExternalStore, useEffect } from "react";
 import type {
   Customer,
   CustomerInput,
@@ -12,6 +12,17 @@ import { getOrders } from "@/lib/orders";
 
 const STORAGE_KEY = "brewpos_customers_v1";
 const CUSTOMERS_EVENT = "brewpos:customers-updated";
+
+let customersSnapshot: Customer[] = [];
+let isCustomersHydrated = false;
+let lastSavedCustomersRaw: string | null = null;
+const customerSubscribers = new Set<() => void>();
+
+function notifyCustomersSubscribers() {
+  for (const cb of customerSubscribers) {
+    cb();
+  }
+}
 
 export const initialCustomers: Customer[] = [
   {
@@ -72,39 +83,55 @@ export const initialCustomers: Customer[] = [
 ];
 
 /**
- * Safely retrieve all customers from localStorage (or fallback to initial seed).
+ * Hydrate customers from localStorage safely without SSR mismatch.
  */
-export function getCustomers(): Customer[] {
-  if (typeof window === "undefined") {
-    return initialCustomers;
-  }
+export function hydrateCustomers(): void {
+  if (typeof window === "undefined" || isCustomersHydrated) return;
+  isCustomersHydrated = true;
 
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(initialCustomers));
-      return initialCustomers;
+      lastSavedCustomersRaw = null;
+      customersSnapshot = initialCustomers;
+      return;
     }
+    lastSavedCustomersRaw = raw;
     const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed) && parsed.length > 0) {
-      return parsed;
+    if (Array.isArray(parsed)) {
+      customersSnapshot = parsed;
+      notifyCustomersSubscribers();
     }
-    return Array.isArray(parsed) ? parsed : initialCustomers;
   } catch (error) {
-    console.error("Failed to read customers from localStorage:", error);
-    return initialCustomers;
+    console.warn("Failed to read customers from localStorage, falling back to initial data:", error);
+    customersSnapshot = initialCustomers;
   }
 }
 
 /**
- * Persist customers array and broadcast change.
+ * Safely retrieve all customers from snapshot (hydrating if called in client).
+ */
+export function getCustomers(): Customer[] {
+  if (typeof window !== "undefined" && !isCustomersHydrated) {
+    hydrateCustomers();
+  }
+  return customersSnapshot.length > 0 ? customersSnapshot : initialCustomers;
+}
+
+/**
+ * Persist customers array, update snapshot, and broadcast change.
  */
 export function saveCustomers(customers: Customer[]): void {
+  customersSnapshot = customers;
+  isCustomersHydrated = true;
   if (typeof window === "undefined") return;
 
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(customers));
+    const raw = JSON.stringify(customers);
+    lastSavedCustomersRaw = raw;
+    localStorage.setItem(STORAGE_KEY, raw);
     window.dispatchEvent(new CustomEvent(CUSTOMERS_EVENT));
+    notifyCustomersSubscribers();
   } catch (error) {
     console.error("Failed to save customers to localStorage:", error);
   }
@@ -335,40 +362,47 @@ export function calculateCustomerMetrics(
 // React useSyncExternalStore Hook for real-time reactivity
 // ----------------------------------------------------------------------
 
-let cachedCustomers: Customer[] = [];
-let cachedCustomersRaw: string | null = null;
-
 function subscribeCustomers(callback: () => void) {
-  if (typeof window === "undefined") return () => {};
+  customerSubscribers.add(callback);
+  if (typeof window !== "undefined") {
+    const handleSync = (e?: StorageEvent | Event) => {
+      if (e && "key" in e && e.key !== STORAGE_KEY) return;
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return;
+        if (raw !== lastSavedCustomersRaw) {
+          lastSavedCustomersRaw = raw;
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) {
+            customersSnapshot = parsed;
+            notifyCustomersSubscribers();
+          }
+        }
+      } catch (err) {
+        console.warn("Failed to sync customers from storage:", err);
+      }
+    };
 
-  window.addEventListener(CUSTOMERS_EVENT, callback);
-  window.addEventListener("storage", callback);
+    window.addEventListener(CUSTOMERS_EVENT, handleSync);
+    window.addEventListener("storage", handleSync);
+    queueMicrotask(() => {
+      hydrateCustomers();
+    });
+
+    return () => {
+      customerSubscribers.delete(callback);
+      window.removeEventListener(CUSTOMERS_EVENT, handleSync);
+      window.removeEventListener("storage", handleSync);
+    };
+  }
 
   return () => {
-    window.removeEventListener(CUSTOMERS_EVENT, callback);
-    window.removeEventListener("storage", callback);
+    customerSubscribers.delete(callback);
   };
 }
 
 function getCustomersSnapshot(): Customer[] {
-  if (typeof window === "undefined") return initialCustomers;
-
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(initialCustomers));
-      cachedCustomers = initialCustomers;
-      cachedCustomersRaw = JSON.stringify(initialCustomers);
-      return cachedCustomers;
-    }
-    if (raw !== cachedCustomersRaw) {
-      cachedCustomersRaw = raw;
-      cachedCustomers = JSON.parse(raw);
-    }
-    return cachedCustomers;
-  } catch {
-    return initialCustomers;
-  }
+  return customersSnapshot.length > 0 ? customersSnapshot : initialCustomers;
 }
 
 function getCustomersServerSnapshot(): Customer[] {
@@ -382,9 +416,13 @@ export function useCustomersStore() {
     getCustomersServerSnapshot
   );
 
+  useEffect(() => {
+    hydrateCustomers();
+  }, []);
+
   return {
     customers,
-    isLoaded: true,
+    isLoaded: isCustomersHydrated,
     addCustomer,
     updateCustomer,
     deleteCustomer,

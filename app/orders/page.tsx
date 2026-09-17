@@ -23,10 +23,12 @@ import {
 } from "lucide-react";
 import Sidebar from "@/components/layout/Sidebar";
 import Topbar from "@/components/layout/Topbar";
+import SkeletonTable from "@/components/ui/SkeletonTable";
 import OrderDetailsModal, {
   getStatusBadgeStyle,
 } from "@/components/orders/OrderDetailsModal";
 import { useOrdersStore } from "@/lib/orders";
+import { formatCurrency } from "@/lib/settings-store";
 import type { CompletedOrder, OrderStatus, OrderType } from "@/types/pos";
 
 type DateFilter = "All" | "Today" | "Yesterday" | "Last 7 Days" | "Last 30 Days";
@@ -281,7 +283,7 @@ export default function OrdersPage() {
                 </span>
               </div>
               <h3 className="mt-2 text-2xl font-bold text-[#6d4730]">
-                ৳{metrics.totalSales.toFixed(2)}
+                {formatCurrency(metrics.totalSales)}
               </h3>
               <p className="mt-1 text-[11px] text-[#9b897b]">Net revenue</p>
             </div>
@@ -391,8 +393,8 @@ export default function OrdersPage() {
 
             {/* Empty State: No orders at all */}
             {!isLoaded ? (
-              <div className="p-12 text-center text-sm text-[#8c7a6c]">
-                Loading orders...
+              <div className="p-4">
+                <SkeletonTable rows={5} columns={6} />
               </div>
             ) : orders.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
@@ -495,7 +497,7 @@ export default function OrdersPage() {
 
                           {/* Total */}
                           <td className="px-5 py-4 font-bold text-[#6d4730]">
-                            ৳{order.total.toFixed(2)}
+                            {formatCurrency(order.total)}
                           </td>
 
                           {/* Payment */}

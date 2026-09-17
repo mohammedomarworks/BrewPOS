@@ -14,8 +14,10 @@ import {
   Settings,
   ChevronDown,
 } from "lucide-react";
+import { useSettingsStore } from "@/lib/settings-store";
+import { useUsersStore } from "@/lib/user-store";
 
-const menuItems = [
+export const menuItems = [
   {
     label: "Dashboard",
     icon: LayoutDashboard,
@@ -57,9 +59,6 @@ const menuItems = [
     href: "/reports",
   },
 ];
-
-import { useSettingsStore } from "@/lib/settings-store";
-import { useUsersStore } from "@/lib/user-store";
 
 export default function Sidebar() {
   const pathname = usePathname();

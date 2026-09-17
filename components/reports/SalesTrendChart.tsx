@@ -4,6 +4,7 @@ import React, { useState, useMemo } from "react";
 import { TrendingUp, BarChart2 } from "lucide-react";
 import { formatCurrency } from "@/lib/reports";
 import type { SalesTrendDataPoint } from "@/lib/reports";
+import { getCurrencySymbol } from "@/lib/settings-store";
 
 interface SalesTrendChartProps {
   data: SalesTrendDataPoint[];
@@ -168,7 +169,7 @@ export default function SalesTrendChart({
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-1.5">
                 <span className="h-2.5 w-2.5 rounded-xs bg-[#c98b5b]" />
-                <span>{viewMode === "sales" ? "Sales (৳)" : "Orders Count"}</span>
+                <span>{viewMode === "sales" ? `Sales (${getCurrencySymbol()})` : "Orders Count"}</span>
               </div>
             </div>
             <span>

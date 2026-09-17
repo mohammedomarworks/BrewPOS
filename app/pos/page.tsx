@@ -21,6 +21,8 @@ import {
   Tag,
   Banknote,
   X,
+  BarChart3,
+  Settings as SettingsIcon,
 } from "lucide-react";
 import { useMemo, useState } from "react";
 
@@ -285,6 +287,22 @@ export default function POSPage() {
                 >
                   <Tag size={13} />
                   Discounts
+                </Link>
+                <span className="text-[#cbb8a8]">/</span>
+                <Link
+                  href="/reports"
+                  className="flex items-center gap-1 rounded-md px-2 py-0.5 text-[#8c7a6c] transition hover:bg-[#efe2d5] hover:text-[#2b1b12]"
+                >
+                  <BarChart3 size={13} />
+                  Reports
+                </Link>
+                <span className="text-[#cbb8a8]">/</span>
+                <Link
+                  href="/settings"
+                  className="flex items-center gap-1 rounded-md px-2 py-0.5 text-[#8c7a6c] transition hover:bg-[#efe2d5] hover:text-[#2b1b12]"
+                >
+                  <SettingsIcon size={13} />
+                  Settings
                 </Link>
               </div>
             </div>

@@ -2,6 +2,7 @@
 
 import { AlertTriangle, Trash2, X, ShieldAlert, Power } from "lucide-react";
 import type { Customer } from "@/types/customer";
+import { useModalEscape } from "@/lib/use-modal-escape";
 
 interface DeleteCustomerModalProps {
   isOpen: boolean;
@@ -20,16 +21,24 @@ export default function DeleteCustomerModal({
   onConfirmDelete,
   onDeactivate,
 }: DeleteCustomerModalProps) {
+  useModalEscape(isOpen, onClose);
+
   if (!isOpen || !customer) return null;
 
   const hasOrders = orderCount > 0;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/60 p-4 backdrop-blur-xs transition-opacity">
-      <div className="relative w-full max-w-md overflow-hidden rounded-3xl border border-[#e8dfd4] bg-white p-6 shadow-2xl transition-all">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="delete-customer-title"
+        className="relative w-full max-w-md overflow-hidden rounded-3xl border border-[#e8dfd4] bg-white p-6 shadow-2xl transition-all"
+      >
         <button
           type="button"
           onClick={onClose}
+          aria-label="Close modal"
           className="absolute right-5 top-5 flex h-8 w-8 items-center justify-center rounded-xl border border-[#e5dbd0] text-[#8c7a6c] transition hover:bg-[#f4ece4] hover:text-[#2b1b12]"
         >
           <X size={16} />
@@ -42,7 +51,7 @@ export default function DeleteCustomerModal({
               <ShieldAlert size={26} />
             </div>
 
-            <h3 className="mt-4 text-lg font-bold text-[#2b1b12]">
+            <h3 id="delete-customer-title" className="mt-4 text-lg font-bold text-[#2b1b12]">
               Cannot Delete Customer
             </h3>
 

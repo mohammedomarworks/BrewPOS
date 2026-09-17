@@ -10,6 +10,8 @@ import {
 } from "lucide-react";
 import type { Product, Category } from "@/data/products";
 import { generateSKU, isSKUUnique } from "@/lib/products";
+import { useSettingsStore } from "@/lib/settings-store";
+import { useModalEscape } from "@/lib/use-modal-escape";
 
 interface ProductModalProps {
   isOpen: boolean;
@@ -30,6 +32,9 @@ export default function ProductModal({
 }: ProductModalProps) {
   const isEditing = !!product;
 
+  const { settings } = useSettingsStore();
+  const currencySymbol = settings.taxCurrency.currencySymbol || "৳";
+
   const defaultCategory =
     categories.length > 0 ? categories[0].name : "Hot Coffee";
 
@@ -45,6 +50,8 @@ export default function ProductModal({
   const [isNew, setIsNew] = useState(product?.isNew ?? false);
 
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  useModalEscape(isOpen, onClose);
 
   if (!isOpen) return null;
 
@@ -105,7 +112,12 @@ export default function ProductModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/60 p-4 backdrop-blur-xs transition-opacity">
-      <div className="relative w-full max-w-xl overflow-hidden rounded-3xl border border-[#e8dfd4] bg-white shadow-2xl transition-all">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="product-modal-title"
+        className="relative w-full max-w-xl overflow-hidden rounded-3xl border border-[#e8dfd4] bg-white shadow-2xl transition-all"
+      >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[#eee5dc] bg-[#faf7f3] px-6 py-4">
           <div className="flex items-center gap-3">
@@ -113,7 +125,7 @@ export default function ProductModal({
               <Coffee size={20} />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-[#2b1b12]">
+              <h2 id="product-modal-title" className="text-lg font-bold text-[#2b1b12]">
                 {isEditing ? "Edit Product" : "Add New Product"}
               </h2>
               <p className="text-xs text-[#8c7a6c]">
@@ -127,6 +139,7 @@ export default function ProductModal({
           <button
             type="button"
             onClick={onClose}
+            aria-label="Close modal"
             className="flex h-9 w-9 items-center justify-center rounded-xl border border-[#e5dbd0] bg-white text-[#8c7a6c] transition hover:bg-[#f4ece4] hover:text-[#2b1b12]"
           >
             <X size={18} />
@@ -238,11 +251,11 @@ export default function ProductModal({
             {/* Pricing */}
             <div>
               <label className="block text-xs font-semibold text-[#2b1b12]">
-                Price (৳) <span className="text-red-500">*</span>
+                Price ({currencySymbol}) <span className="text-red-500">*</span>
               </label>
               <div className="relative mt-1.5">
                 <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-bold text-[#9b897b]">
-                  ৳
+                  {currencySymbol}
                 </span>
                 <input
                   type="number"

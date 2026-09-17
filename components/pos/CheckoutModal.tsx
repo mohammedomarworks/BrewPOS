@@ -27,6 +27,7 @@ import { deductStockForOrder, checkCartStock } from "@/lib/recipes";
 import { useInventoryStore } from "@/lib/inventory-store";
 import { incrementDiscountUsage } from "@/lib/discounts";
 import { useSettingsStore } from "@/lib/settings-store";
+import { useModalEscape } from "@/lib/use-modal-escape";
 
 interface CheckoutModalProps {
   isOpen: boolean;
@@ -81,6 +82,13 @@ export default function CheckoutModal({
   const { settings } = useSettingsStore();
   const sym = settings.taxCurrency.currencySymbol;
   const vatPercent = settings.taxCurrency.vatRate;
+
+  // Modal escape handling (only during initial checkout step and when not actively processing payment)
+  useModalEscape(isOpen, () => {
+    if (step === "checkout" && !isProcessing) {
+      onClose();
+    }
+  });
 
   // Available Payment Methods based on Admin Settings
   const availablePaymentMethods = useMemo(() => {
@@ -245,7 +253,12 @@ export default function CheckoutModal({
       {completedOrder && <Receipt order={completedOrder} variant="print-only" />}
 
       {/* Main Modal Card */}
-      <div className="relative w-full max-w-4xl overflow-hidden rounded-3xl border border-[#e8dfd4] bg-white shadow-2xl transition-all print:hidden">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="checkout-modal-title"
+        className="relative w-full max-w-4xl overflow-hidden rounded-3xl border border-[#e8dfd4] bg-white shadow-2xl transition-all print:hidden"
+      >
         {/* Modal Top Header */}
         <div className="flex items-center justify-between border-b border-[#eee5dc] bg-[#faf7f3] px-6 py-4">
           <div className="flex items-center gap-3">
@@ -254,7 +267,7 @@ export default function CheckoutModal({
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-lg font-bold text-[#2b1b12]">
+                <h2 id="checkout-modal-title" className="text-lg font-bold text-[#2b1b12]">
                   {step === "checkout" ? "Complete Checkout" : "Order Completed"}
                 </h2>
                 <span className="rounded-md bg-[#efe2d5] px-2 py-0.5 text-xs font-semibold text-[#6d4730]">
@@ -269,8 +282,10 @@ export default function CheckoutModal({
 
           {step === "checkout" && (
             <button
+              type="button"
               onClick={onClose}
               disabled={isProcessing}
+              aria-label="Close checkout modal"
               className="flex h-9 w-9 items-center justify-center rounded-xl border border-[#e5dbd0] bg-white text-[#8c7a6c] transition hover:bg-[#f4ece4] hover:text-[#2b1b12]"
             >
               <X size={18} />
@@ -308,12 +323,12 @@ export default function CheckoutModal({
                           {item.name}
                         </p>
                         <p className="text-xs text-[#9b897b]">
-                          ৳{item.price.toFixed(2)} each
+                          {sym}{item.price.toFixed(2)} each
                         </p>
                       </div>
                     </div>
                     <span className="font-semibold text-[#6d4730]">
-                      ৳{(item.price * item.quantity).toFixed(2)}
+                      {sym}{(item.price * item.quantity).toFixed(2)}
                     </span>
                   </div>
                 ))}
@@ -324,7 +339,7 @@ export default function CheckoutModal({
                 <div className="flex justify-between text-[#66574d]">
                   <span>Subtotal</span>
                   <span className="font-medium text-[#2b1b12]">
-                    ৳{subtotal.toFixed(2)}
+                    {sym}{subtotal.toFixed(2)}
                   </span>
                 </div>
 
@@ -338,7 +353,7 @@ export default function CheckoutModal({
                         ? `(${discountPercent}%)`
                         : ""}
                     </span>
-                    <span className="font-semibold">-৳{discount.toFixed(2)}</span>
+                    <span className="font-semibold">-{sym}{discount.toFixed(2)}</span>
                   </div>
                 )}
 
