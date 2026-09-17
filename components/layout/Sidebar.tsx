@@ -54,6 +54,7 @@ const menuItems = [
   {
     label: "Reports",
     icon: BarChart3,
+    href: "/reports",
   },
 ];
 
