@@ -26,6 +26,7 @@ import { addOrder } from "@/lib/orders";
 import { deductStockForOrder, checkCartStock } from "@/lib/recipes";
 import { useInventoryStore } from "@/lib/inventory-store";
 import { incrementDiscountUsage } from "@/lib/discounts";
+import { useSettingsStore } from "@/lib/settings-store";
 
 interface CheckoutModalProps {
   isOpen: boolean;
@@ -77,17 +78,64 @@ export default function CheckoutModal({
   onNewOrder,
   orderNumber,
 }: CheckoutModalProps) {
+  const { settings } = useSettingsStore();
+  const sym = settings.taxCurrency.currencySymbol;
+  const vatPercent = settings.taxCurrency.vatRate;
+
+  // Available Payment Methods based on Admin Settings
+  const availablePaymentMethods = useMemo(() => {
+    const list: { id: PaymentMethod; label: string; icon: typeof Banknote }[] = [];
+    if (settings.payments.enableCash) {
+      list.push({ id: "cash", label: "Cash", icon: Banknote });
+    }
+    if (settings.payments.enableCard) {
+      list.push({ id: "card", label: "Card", icon: CreditCard });
+    }
+    if (settings.payments.enableMobile) {
+      list.push({ id: "mobile", label: "Mobile", icon: Smartphone });
+    }
+    return list.length > 0
+      ? list
+      : [{ id: "cash" as PaymentMethod, label: "Cash", icon: Banknote }];
+  }, [settings.payments]);
+
   const [step, setStep] = useState<"checkout" | "success">("checkout");
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("cash");
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethod>("cash");
+
+  // Effective payment method fallback if currently selected is disabled
+  const paymentMethod = useMemo(() => {
+    if (availablePaymentMethods.some((m) => m.id === selectedPaymentMethod)) {
+      return selectedPaymentMethod;
+    }
+    return availablePaymentMethods[0].id;
+  }, [availablePaymentMethods, selectedPaymentMethod]);
+
   const [amountReceived, setAmountReceived] = useState<string>("");
-  const [mobileProvider, setMobileProvider] = useState<string>("bKash");
+
+  // Available mobile providers from settings
+  const availableMobileProviders = useMemo(() => {
+    const list = settings.payments.mobileProviders || [];
+    return list.length > 0 ? list : ["bKash", "Nagad", "Rocket", "Upay"];
+  }, [settings.payments.mobileProviders]);
+
+  const [selectedMobileProvider, setSelectedMobileProvider] = useState<string>("bKash");
+
+  const mobileProvider = useMemo(() => {
+    if (availableMobileProviders.includes(selectedMobileProvider)) {
+      return selectedMobileProvider;
+    }
+    return availableMobileProviders[0] || "bKash";
+  }, [availableMobileProviders, selectedMobileProvider]);
+
   const [mobileRef, setMobileRef] = useState<string>(() => {
     return `TRX-${Math.floor(100000 + Math.random() * 900000)}`;
   });
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [completedOrder, setCompletedOrder] = useState<CompletedOrder | null>(null);
   const [copiedOrderNo, setCopiedOrderNo] = useState<boolean>(false);
-  const [showReceiptPreview, setShowReceiptPreview] = useState<boolean>(false);
+  const [showReceiptPreview, setShowReceiptPreview] = useState<boolean>(() => {
+    return settings.pos.autoOpenReceipt ?? false;
+  });
 
   // Live Inventory Stock Validation
   const { ingredients } = useInventoryStore();
@@ -176,7 +224,7 @@ export default function CheckoutModal({
           dateStyle: "medium",
           timeStyle: "short",
         }),
-        status: "Completed",
+        status: settings.orders.defaultOrderStatus || "Completed",
       };
 
       addOrder(order);
@@ -296,13 +344,13 @@ export default function CheckoutModal({
 
                 <div className="flex justify-between text-[#8c7a6c]">
                   <span>Taxable Amount</span>
-                  <span>৳{taxableAmount.toFixed(2)}</span>
+                  <span>{sym}{taxableAmount.toFixed(2)}</span>
                 </div>
 
                 <div className="flex justify-between text-[#66574d]">
-                  <span>VAT (15%)</span>
+                  <span>VAT ({vatPercent}%)</span>
                   <span className="font-medium text-[#2b1b12]">
-                    ৳{vat.toFixed(2)}
+                    {sym}{vat.toFixed(2)}
                   </span>
                 </div>
 
@@ -313,7 +361,7 @@ export default function CheckoutModal({
                     Grand Total
                   </span>
                   <span className="text-2xl font-extrabold text-[#6d4730]">
-                    ৳{total.toFixed(2)}
+                    {sym}{total.toFixed(2)}
                   </span>
                 </div>
               </div>
@@ -326,13 +374,14 @@ export default function CheckoutModal({
                   Select Payment Method
                 </p>
 
-                {/* 3 Payment Methods */}
-                <div className="mt-3 grid grid-cols-3 gap-2.5">
-                  {[
-                    { id: "cash", label: "Cash", icon: Banknote },
-                    { id: "card", label: "Card", icon: CreditCard },
-                    { id: "mobile", label: "Mobile", icon: Smartphone },
-                  ].map((method) => {
+                {/* Enabled Payment Methods */}
+                <div
+                  className="mt-3 grid gap-2.5"
+                  style={{
+                    gridTemplateColumns: `repeat(${Math.max(1, availablePaymentMethods.length)}, minmax(0, 1fr))`,
+                  }}
+                >
+                  {availablePaymentMethods.map((method) => {
                     const Icon = method.icon;
                     const isSelected = paymentMethod === method.id;
 
@@ -340,7 +389,7 @@ export default function CheckoutModal({
                       <button
                         key={method.id}
                         type="button"
-                        onClick={() => setPaymentMethod(method.id as PaymentMethod)}
+                        onClick={() => setSelectedPaymentMethod(method.id)}
                         className={`group relative flex flex-col items-center gap-2 rounded-2xl border p-3.5 text-center transition ${
                           isSelected
                             ? "border-[#2b1b12] bg-[#2b1b12] text-white shadow-md shadow-[#2b1b12]/15"
@@ -371,13 +420,13 @@ export default function CheckoutModal({
                           Amount Received
                         </label>
                         <span className="text-xs text-[#8c7a6c]">
-                          Total due: ৳{total.toFixed(2)}
+                          Total due: {sym}{total.toFixed(2)}
                         </span>
                       </div>
 
                       <div className="relative mt-2">
                         <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-base font-bold text-[#9b897b]">
-                          ৳
+                          {sym}
                         </span>
                         <input
                           type="number"
@@ -393,27 +442,29 @@ export default function CheckoutModal({
                     </div>
 
                     {/* Quick tender suggestions */}
-                    <div>
-                      <p className="mb-2 text-[11px] font-medium text-[#8c7a6c]">
-                        Quick Tender:
-                      </p>
-                      <div className="flex flex-wrap gap-2">
-                        {quickTenders.map((amount) => (
-                          <button
-                            key={amount}
-                            type="button"
-                            onClick={() => setAmountReceived(amount.toFixed(2))}
-                            className={`rounded-lg border px-2.5 py-1.5 text-xs font-medium transition ${
-                              amountReceived === amount.toFixed(2)
-                                ? "border-[#c98b5b] bg-[#c98b5b] text-white"
-                                : "border-[#e5dbd0] bg-white text-[#6d4730] hover:bg-[#f4ece4]"
-                            }`}
-                          >
-                            ৳{amount.toFixed(2)}
-                          </button>
-                        ))}
+                    {settings.pos.enableQuickTender && quickTenders.length > 0 && (
+                      <div>
+                        <p className="mb-2 text-[11px] font-medium text-[#8c7a6c]">
+                          Quick Tender:
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          {quickTenders.map((amount) => (
+                            <button
+                              key={amount}
+                              type="button"
+                              onClick={() => setAmountReceived(amount.toFixed(2))}
+                              className={`rounded-lg border px-2.5 py-1.5 text-xs font-medium transition ${
+                                amountReceived === amount.toFixed(2)
+                                  ? "border-[#c98b5b] bg-[#c98b5b] text-white"
+                                  : "border-[#e5dbd0] bg-white text-[#6d4730] hover:bg-[#f4ece4]"
+                              }`}
+                            >
+                              {sym}{amount.toFixed(2)}
+                            </button>
+                          ))}
+                        </div>
                       </div>
-                    </div>
+                    )}
 
                     {/* Change & Validation feedback */}
                     <div className="rounded-2xl border border-[#eee5dc] bg-[#faf7f3] p-4">
@@ -431,7 +482,7 @@ export default function CheckoutModal({
                           <p className="text-red-500">
                             Short by:{" "}
                             <span className="font-bold">
-                              ৳{remainingCashNeeded.toFixed(2)}
+                              {sym}{remainingCashNeeded.toFixed(2)}
                             </span>
                           </p>
                         </div>
@@ -446,7 +497,7 @@ export default function CheckoutModal({
                             </p>
                           </div>
                           <span className="text-2xl font-extrabold text-emerald-600">
-                            ৳{cashChange.toFixed(2)}
+                            {sym}{cashChange.toFixed(2)}
                           </span>
                         </div>
                       )}
@@ -485,7 +536,7 @@ export default function CheckoutModal({
                             Charge Amount
                           </p>
                           <p className="text-lg font-bold text-[#c98b5b]">
-                            ৳{total.toFixed(2)}
+                            {sym}{total.toFixed(2)}
                           </p>
                         </div>
                       </div>
@@ -509,12 +560,17 @@ export default function CheckoutModal({
                       <label className="text-xs font-semibold text-[#2b1b12]">
                         Mobile Wallet Provider
                       </label>
-                      <div className="mt-2 grid grid-cols-4 gap-2">
-                        {["bKash", "Nagad", "Rocket", "Upay"].map((provider) => (
+                      <div
+                        className="mt-2 grid gap-2"
+                        style={{
+                          gridTemplateColumns: `repeat(${Math.max(1, Math.min(4, availableMobileProviders.length))}, minmax(0, 1fr))`,
+                        }}
+                      >
+                        {availableMobileProviders.map((provider: string) => (
                           <button
                             key={provider}
                             type="button"
-                            onClick={() => setMobileProvider(provider)}
+                            onClick={() => setSelectedMobileProvider(provider)}
                             className={`rounded-xl border py-2 text-xs font-medium transition ${
                               mobileProvider === provider
                                 ? "border-[#c98b5b] bg-[#c98b5b] font-semibold text-white"
@@ -564,7 +620,7 @@ export default function CheckoutModal({
                       <div className="mt-1 flex items-center justify-between">
                         <span>Payable Amount:</span>
                         <span className="font-bold text-[#6d4730]">
-                          ৳{total.toFixed(2)}
+                          {sym}{total.toFixed(2)}
                         </span>
                       </div>
                     </div>
@@ -620,11 +676,11 @@ export default function CheckoutModal({
                   ) : !stockValidation.canFulfill ? (
                     "Insufficient Stock to Complete Sale"
                   ) : paymentMethod === "cash" ? (
-                    `Complete Cash Payment (৳${total.toFixed(2)})`
+                    `Complete Cash Payment (${sym}${total.toFixed(2)})`
                   ) : paymentMethod === "card" ? (
-                    `Confirm Card Payment (৳${total.toFixed(2)})`
+                    `Confirm Card Payment (${sym}${total.toFixed(2)})`
                   ) : (
-                    `Confirm ${mobileProvider} Payment (৳${total.toFixed(2)})`
+                    `Confirm ${mobileProvider} Payment (${sym}${total.toFixed(2)})`
                   )}
                 </button>
               </div>
@@ -693,7 +749,7 @@ export default function CheckoutModal({
                 <div>
                   <p className="text-xs text-[#8c7a6c]">Total Paid</p>
                   <p className="text-base font-bold text-[#6d4730]">
-                    ৳{completedOrder.total.toFixed(2)}
+                    {sym}{completedOrder.total.toFixed(2)}
                   </p>
                 </div>
               </div>
@@ -704,13 +760,13 @@ export default function CheckoutModal({
                   <div>
                     <span className="text-emerald-600">Amount Tendered: </span>
                     <span className="font-semibold">
-                      ৳{completedOrder.payment.amountReceived.toFixed(2)}
+                      {sym}{completedOrder.payment.amountReceived.toFixed(2)}
                     </span>
                   </div>
                   <div>
                     <span className="text-emerald-600">Change Returned: </span>
                     <span className="font-bold text-sm text-emerald-700">
-                      ৳{completedOrder.payment.change.toFixed(2)}
+                      {sym}{completedOrder.payment.change.toFixed(2)}
                     </span>
                   </div>
                 </div>
@@ -744,14 +800,14 @@ export default function CheckoutModal({
                     {completedOrder.items.map((it) => (
                       <div key={it.id} className="flex justify-between text-[#2b1b12]">
                         <span>{it.quantity}x {it.name}</span>
-                        <span>৳{(it.price * it.quantity).toFixed(2)}</span>
+                        <span>{sym}{(it.price * it.quantity).toFixed(2)}</span>
                       </div>
                     ))}
                   </div>
                   <div className="space-y-1 pt-1 text-[#8c7a6c]">
                     <div className="flex justify-between">
                       <span>Subtotal</span>
-                      <span>৳{completedOrder.subtotal.toFixed(2)}</span>
+                      <span>{sym}{completedOrder.subtotal.toFixed(2)}</span>
                     </div>
                     {completedOrder.discount > 0 && (
                       <div className="flex justify-between text-[#c98b5b]">
@@ -763,16 +819,22 @@ export default function CheckoutModal({
                             ? `(${completedOrder.discountPercent}%)`
                             : ""}
                         </span>
-                        <span>-৳{completedOrder.discount.toFixed(2)}</span>
+                        <span>-{sym}{completedOrder.discount.toFixed(2)}</span>
                       </div>
                     )}
                     <div className="flex justify-between">
-                      <span>VAT (15%)</span>
-                      <span>৳{completedOrder.vat.toFixed(2)}</span>
+                      <span>
+                        VAT (
+                        {completedOrder.taxableAmount > 0
+                          ? Math.round((completedOrder.vat / completedOrder.taxableAmount) * 100)
+                          : vatPercent}
+                        %)
+                      </span>
+                      <span>{sym}{completedOrder.vat.toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between font-bold text-[#2b1b12]">
                       <span>Total Paid</span>
-                      <span>৳{completedOrder.total.toFixed(2)}</span>
+                      <span>{sym}{completedOrder.total.toFixed(2)}</span>
                     </div>
                   </div>
                 </div>

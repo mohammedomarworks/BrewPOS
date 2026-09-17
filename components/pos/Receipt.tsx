@@ -1,29 +1,77 @@
+"use client";
+
 import type { CompletedOrder } from "@/types/pos";
+import { useSettingsStore } from "@/lib/settings-store";
 
 interface ReceiptProps {
   order: CompletedOrder;
   variant?: "print-only" | "preview" | "both";
+  cashierName?: string;
 }
 
-export default function Receipt({ order, variant = "print-only" }: ReceiptProps) {
+export default function Receipt({
+  order,
+  variant = "print-only",
+  cashierName,
+}: ReceiptProps) {
   const isPrintOnly = variant === "print-only";
   const isPreview = variant === "preview";
+  const { settings } = useSettingsStore();
+
+  const business = settings.business;
+  const receiptConfig = settings.receipt;
+  const sym = settings.taxCurrency.currencySymbol || "৳";
+
+  // Calculate order-specific VAT percentage rate based on its stored values
+  const effectiveVatPercent =
+    order.taxableAmount > 0
+      ? Math.round((order.vat / order.taxableAmount) * 100)
+      : settings.taxCurrency.vatRate;
 
   // Common inner receipt structure
   const receiptBody = (
     <div className="font-mono text-xs text-neutral-900 leading-relaxed">
       {/* Header */}
       <div className="text-center">
-        <h1 className="text-base font-bold tracking-tight">BrewPOS Coffee Shop</h1>
-        <p className="text-[10px] text-neutral-500">Premium Artisanal Coffee</p>
-        <p className="text-[10px] text-neutral-500">Dhanmondi, Dhaka</p>
+        <h1 className="text-base font-bold tracking-tight">
+          {business.name || "BrewPOS Coffee Shop"}
+        </h1>
+        {business.tagline && (
+          <p className="text-[10px] text-neutral-500">{business.tagline}</p>
+        )}
+        {receiptConfig.showAddress && business.address && (
+          <p className="text-[10px] text-neutral-500">{business.address}</p>
+        )}
+        {receiptConfig.showPhone && business.phone && (
+          <p className="text-[10px] text-neutral-500">Tel: {business.phone}</p>
+        )}
+        {receiptConfig.showVatNumber && business.vatNumber && (
+          <p className="text-[10px] text-neutral-500">BIN: {business.vatNumber}</p>
+        )}
+
         <div className="my-2 border-b border-dashed border-neutral-400" />
         <p className="font-bold text-sm tracking-wide">ORDER #{order.orderNumber}</p>
         <p className="text-[10px] text-neutral-600">{order.createdAt}</p>
-        <p className="text-[10px] text-neutral-600">
-          Type: <span className="font-semibold">{order.orderType}</span> | Customer:{" "}
-          <span className="font-semibold">{order.customer}</span>
-        </p>
+
+        <div className="text-[10px] text-neutral-600">
+          {receiptConfig.showOrderType && (
+            <span>
+              Type: <span className="font-semibold">{order.orderType}</span>
+            </span>
+          )}
+          {receiptConfig.showCustomer && order.customer && (
+            <span>
+              {" "}
+              | Customer:{" "}
+              <span className="font-semibold">{order.customer}</span>
+            </span>
+          )}
+          {receiptConfig.showCashier && (
+            <p className="text-[10px] text-neutral-500 mt-0.5">
+              Cashier: {cashierName || "Counter 1"}
+            </p>
+          )}
+        </div>
         <div className="my-2 border-b border-dashed border-neutral-400" />
       </div>
 
@@ -35,7 +83,7 @@ export default function Receipt({ order, variant = "print-only" }: ReceiptProps)
               {item.quantity}x {item.name}
             </span>
             <span className="shrink-0 font-medium">
-              ৳{(item.price * item.quantity).toFixed(2)}
+              {sym}{(item.price * item.quantity).toFixed(2)}
             </span>
           </div>
         ))}
@@ -47,7 +95,9 @@ export default function Receipt({ order, variant = "print-only" }: ReceiptProps)
       <div className="space-y-0.5 text-right">
         <div className="flex justify-between">
           <span className="text-neutral-600">Subtotal:</span>
-          <span>৳{order.subtotal.toFixed(2)}</span>
+          <span>
+            {sym}{order.subtotal.toFixed(2)}
+          </span>
         </div>
         {order.discount > 0 && (
           <div className="flex justify-between text-neutral-700">
@@ -59,54 +109,68 @@ export default function Receipt({ order, variant = "print-only" }: ReceiptProps)
                 ? `(${order.discountPercent}%)`
                 : ""}:
             </span>
-            <span>-৳{order.discount.toFixed(2)}</span>
+            <span>
+              -{sym}{order.discount.toFixed(2)}
+            </span>
           </div>
         )}
         <div className="flex justify-between text-neutral-600">
-          <span>VAT (15%):</span>
-          <span>৳{order.vat.toFixed(2)}</span>
+          <span>VAT ({effectiveVatPercent}%):</span>
+          <span>
+            {sym}{order.vat.toFixed(2)}
+          </span>
         </div>
         <div className="flex justify-between font-bold text-sm pt-1 border-t border-dotted border-neutral-300">
           <span>TOTAL:</span>
-          <span>৳{order.total.toFixed(2)}</span>
+          <span>
+            {sym}{order.total.toFixed(2)}
+          </span>
         </div>
       </div>
 
-      <div className="my-2 border-b border-dashed border-neutral-400" />
+      {receiptConfig.showPaymentMethod && (
+        <>
+          <div className="my-2 border-b border-dashed border-neutral-400" />
 
-      {/* Payment Information */}
-      <div className="space-y-0.5 text-[10px]">
-        <div className="flex justify-between">
-          <span className="text-neutral-600">Payment Method:</span>
-          <span className="font-semibold uppercase">{order.payment.method}</span>
-        </div>
-        <div className="flex justify-between">
-          <span className="text-neutral-600">Paid Amount:</span>
-          <span className="font-semibold">৳{order.payment.amountReceived.toFixed(2)}</span>
-        </div>
-        {order.payment.method === "cash" && (
-          <div className="flex justify-between font-bold">
-            <span>Change Returned:</span>
-            <span>৳{order.payment.change.toFixed(2)}</span>
+          {/* Payment Information */}
+          <div className="space-y-0.5 text-[10px]">
+            <div className="flex justify-between">
+              <span className="text-neutral-600">Payment Method:</span>
+              <span className="font-semibold uppercase">{order.payment.method}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-neutral-600">Paid Amount:</span>
+              <span className="font-semibold">
+                {sym}{order.payment.amountReceived.toFixed(2)}
+              </span>
+            </div>
+            {order.payment.method === "cash" && (
+              <div className="flex justify-between font-bold">
+                <span>Change Returned:</span>
+                <span>
+                  {sym}{order.payment.change.toFixed(2)}
+                </span>
+              </div>
+            )}
+            {order.payment.cardLast4 && (
+              <div className="flex justify-between">
+                <span className="text-neutral-600">Card:</span>
+                <span>•••• {order.payment.cardLast4}</span>
+              </div>
+            )}
+            {order.payment.transactionRef && (
+              <div className="flex justify-between">
+                <span className="text-neutral-600">Ref:</span>
+                <span className="font-mono">{order.payment.transactionRef}</span>
+              </div>
+            )}
           </div>
-        )}
-        {order.payment.cardLast4 && (
-          <div className="flex justify-between">
-            <span className="text-neutral-600">Card:</span>
-            <span>•••• {order.payment.cardLast4}</span>
-          </div>
-        )}
-        {order.payment.transactionRef && (
-          <div className="flex justify-between">
-            <span className="text-neutral-600">Ref:</span>
-            <span className="font-mono">{order.payment.transactionRef}</span>
-          </div>
-        )}
-      </div>
+        </>
+      )}
 
       {/* Footer */}
       <div className="mt-4 text-center text-[10px] text-neutral-500">
-        <p>Thank you for choosing BrewPOS!</p>
+        <p>{receiptConfig.footerMessage || "Thank you for choosing BrewPOS!"}</p>
         <p>Please come again.</p>
       </div>
     </div>

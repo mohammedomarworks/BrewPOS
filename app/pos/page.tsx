@@ -39,8 +39,13 @@ import {
   calculateDiscount,
   getDiscountStatus,
 } from "@/lib/discounts";
+import { useSettingsStore } from "@/lib/settings-store";
 
 export default function POSPage() {
+  const { settings } = useSettingsStore();
+  const sym = settings.taxCurrency.currencySymbol;
+  const vatRate = settings.taxCurrency.vatRate;
+
   const { products } = useProductsStore();
   const { categories: categoryList } = useCategoriesStore();
   const { customers, addCustomer } = useCustomersStore();
@@ -58,10 +63,23 @@ export default function POSPage() {
     return customers.filter((c) => c.status === "Active");
   }, [customers]);
 
+  // Available order types based on admin settings
+  const availableOrderTypes = useMemo(() => {
+    const types: { label: OrderType; icon: typeof Store }[] = [];
+    if (settings.pos.enableDineIn) types.push({ label: "Dine In", icon: Store });
+    if (settings.pos.enableTakeAway) types.push({ label: "Take Away", icon: ShoppingBag });
+    if (settings.pos.enableDelivery) types.push({ label: "Delivery", icon: Truck });
+    return types.length > 0
+      ? types
+      : [{ label: "Take Away" as OrderType, icon: ShoppingBag }];
+  }, [settings.pos]);
+
   const [selectedCategory, setSelectedCategory] = useState("All Items");
   const [search, setSearch] = useState("");
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [orderType, setOrderType] = useState<OrderType>("Take Away");
+  const [orderType, setOrderType] = useState<OrderType>(() => {
+    return (settings.pos.defaultOrderType as OrderType) || "Take Away";
+  });
   const [customerId, setCustomerId] = useState<string | undefined>(undefined);
   const [customer, setCustomer] = useState("Walk-in Customer");
 
@@ -73,7 +91,9 @@ export default function POSPage() {
 
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [isQuickCustomerOpen, setIsQuickCustomerOpen] = useState(false);
-  const [currentOrderNumber, setCurrentOrderNumber] = useState("COF-2026-00001");
+  const [currentOrderNumber, setCurrentOrderNumber] = useState(() =>
+    getNextOrderNumber(settings.orders.orderPrefix)
+  );
 
   const cartStock = useMemo(
     () => checkCartStock(cart, ingredients),
@@ -82,12 +102,12 @@ export default function POSPage() {
 
   const handleOpenCheckout = () => {
     if (!cartStock.canFulfill) return;
-    setCurrentOrderNumber(getNextOrderNumber());
+    setCurrentOrderNumber(getNextOrderNumber(settings.orders.orderPrefix));
     setIsCheckoutOpen(true);
   };
 
   const handleCompleteOrder = () => {
-    setCurrentOrderNumber(getNextOrderNumber());
+    setCurrentOrderNumber(getNextOrderNumber(settings.orders.orderPrefix));
   };
 
   const handleNewOrder = () => {
@@ -96,7 +116,7 @@ export default function POSPage() {
     setCouponInput("");
     setCouponError(null);
     setShowOffers(false);
-    setOrderType("Take Away");
+    setOrderType((settings.pos.defaultOrderType as OrderType) || "Take Away");
     setCustomerId(undefined);
     setCustomer("Walk-in Customer");
     setIsCheckoutOpen(false);
@@ -112,7 +132,7 @@ export default function POSPage() {
       setCouponError(`Coupon "${targetCode.toUpperCase()}" not found.`);
       return;
     }
-    const res = calculateDiscount(cart, found, customerId, currentTime);
+    const res = calculateDiscount(cart, found, customerId, currentTime, vatRate);
     if (!res.valid) {
       setCouponError(res.reason || "This coupon cannot be applied.");
       return;
@@ -194,8 +214,8 @@ export default function POSPage() {
   );
 
   const discountResult = useMemo(
-    () => calculateDiscount(cart, appliedDiscount, customerId, currentTime),
-    [cart, appliedDiscount, customerId, currentTime]
+    () => calculateDiscount(cart, appliedDiscount, customerId, currentTime, vatRate),
+    [cart, appliedDiscount, customerId, currentTime, vatRate]
   );
 
   const discount = discountResult.discountAmount;
@@ -347,25 +367,27 @@ export default function POSPage() {
                         : "opacity-60 cursor-not-allowed"
                     }`}
                   >
-                    <div className="relative flex aspect-[4/3] items-center justify-center rounded-xl bg-[#efe2d5] text-4xl">
-                      {product.image || "☕"}
-                      {!isAvailable && (
-                        <div className="absolute inset-0 flex flex-col items-center justify-center rounded-xl bg-black/55 p-2 text-center text-xs font-bold uppercase tracking-wider text-white backdrop-blur-[1px]">
-                          <span>
-                            {product.available === false
-                              ? "Unavailable"
-                              : "Out of Stock"}
-                          </span>
-                          {product.available !== false && !stockCheck.canFulfill && stockCheck.missingIngredients[0] && (
-                            <span className="mt-1 text-[10px] font-normal lowercase tracking-normal text-amber-200">
-                              Low {stockCheck.missingIngredients[0].ingredientName}
+                    {settings.pos.showProductImages && (
+                      <div className="relative flex aspect-[4/3] items-center justify-center rounded-xl bg-[#efe2d5] text-4xl">
+                        {product.image || "☕"}
+                        {!isAvailable && (
+                          <div className="absolute inset-0 flex flex-col items-center justify-center rounded-xl bg-black/55 p-2 text-center text-xs font-bold uppercase tracking-wider text-white backdrop-blur-[1px]">
+                            <span>
+                              {product.available === false
+                                ? "Unavailable"
+                                : "Out of Stock"}
                             </span>
-                          )}
-                        </div>
-                      )}
-                    </div>
+                            {product.available !== false && !stockCheck.canFulfill && stockCheck.missingIngredients[0] && (
+                              <span className="mt-1 text-[10px] font-normal lowercase tracking-normal text-amber-200">
+                                Low {stockCheck.missingIngredients[0].ingredientName}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
 
-                    <div className="mt-4">
+                    <div className={settings.pos.showProductImages ? "mt-4" : "mt-1"}>
                       <div className="flex items-center justify-between">
                         <p className="text-xs font-medium text-[#c98b5b]">
                           {product.category}
@@ -388,7 +410,7 @@ export default function POSPage() {
 
                       <div className="mt-3 flex items-center justify-between">
                         <span className="font-semibold text-[#6d4730]">
-                          ৳{product.price.toFixed(2)}
+                          {sym}{product.price.toFixed(2)}
                         </span>
 
                         {isAvailable ? (
@@ -429,31 +451,19 @@ export default function POSPage() {
                 Order Type
               </p>
 
-              <div className="grid grid-cols-3 gap-2">
-                {[
-                  {
-                    label: "Dine In",
-                    icon: Store,
-                  },
-                  {
-                    label: "Take Away",
-                    icon: ShoppingBag,
-                  },
-                  {
-                    label: "Delivery",
-                    icon: Truck,
-                  },
-                ].map((type) => {
+              <div
+                className="grid gap-2"
+                style={{
+                  gridTemplateColumns: `repeat(${Math.max(1, availableOrderTypes.length)}, minmax(0, 1fr))`,
+                }}
+              >
+                {availableOrderTypes.map((type) => {
                   const Icon = type.icon;
 
                   return (
                     <button
                       key={type.label}
-                      onClick={() =>
-                        setOrderType(
-                          type.label as "Dine In" | "Take Away" | "Delivery",
-                        )
-                      }
+                      onClick={() => setOrderType(type.label)}
                       className={`flex flex-col items-center gap-1.5 rounded-xl px-2 py-3 text-xs font-medium transition ${
                         orderType === type.label
                           ? "bg-[#2b1b12] text-white"
@@ -551,7 +561,7 @@ export default function POSPage() {
                           </p>
 
                           <p className="mt-1 text-xs text-[#8c7a6c]">
-                            ৳{item.price.toFixed(2)} each
+                            {sym}{item.price.toFixed(2)} each
                           </p>
                         </div>
 
@@ -585,7 +595,7 @@ export default function POSPage() {
                         </div>
 
                         <span className="text-sm font-semibold text-[#6d4730]">
-                          ৳{(item.price * item.quantity).toFixed(2)}
+                          {sym}{(item.price * item.quantity).toFixed(2)}
                         </span>
                       </div>
                     </div>
@@ -635,7 +645,7 @@ export default function POSPage() {
                               <span className="rounded bg-[#efe2d5] px-1.5 py-0.2 text-[10px] font-bold text-[#6d4730]">
                                 {appliedDiscount.type === "Percentage"
                                   ? `${appliedDiscount.value}% OFF`
-                                  : `৳${appliedDiscount.value} Flat`}
+                                  : `${sym}${appliedDiscount.value} Flat`}
                               </span>
                             </div>
                             <p className="text-[10px] text-[#8c7a6c] line-clamp-1">
@@ -707,13 +717,13 @@ export default function POSPage() {
                                   <span className="text-[10px] font-semibold text-amber-700">
                                     {o.type === "Percentage"
                                       ? `${o.value}% OFF`
-                                      : `৳${o.value} OFF`}
+                                      : `${sym}${o.value} OFF`}
                                   </span>
                                 </div>
                                 <p className="text-[10px] text-[#8c7a6c] line-clamp-1">
                                   {o.name}
                                   {o.minimumOrderAmount
-                                    ? ` • Min ৳${o.minimumOrderAmount}`
+                                    ? ` • Min ${sym}${o.minimumOrderAmount}`
                                     : ""}
                                 </p>
                               </div>
@@ -729,17 +739,17 @@ export default function POSPage() {
                 </div>
                 <div className="flex justify-between text-[#66574d]">
                   <span>Subtotal</span>
-                  <span>৳{subtotal.toFixed(2)}</span>
+                  <span>{sym}{subtotal.toFixed(2)}</span>
                 </div>
 
                 <div className="flex justify-between text-[#66574d]">
                   <span>Discount</span>
-                  <span>৳{discount.toFixed(2)}</span>
+                  <span>{sym}{discount.toFixed(2)}</span>
                 </div>
 
                 <div className="flex justify-between text-[#66574d]">
-                  <span>VAT (15%)</span>
-                  <span>৳{vat.toFixed(2)}</span>
+                  <span>VAT ({vatRate}%)</span>
+                  <span>{sym}{vat.toFixed(2)}</span>
                 </div>
 
                 <div className="my-3 border-t border-dashed border-[#ddd0c4]" />
@@ -748,7 +758,7 @@ export default function POSPage() {
                   <span className="font-semibold text-[#2b1b12]">Total</span>
 
                   <span className="text-xl font-bold text-[#6d4730]">
-                    ৳{total.toFixed(2)}
+                    {sym}{total.toFixed(2)}
                   </span>
                 </div>
               </div>

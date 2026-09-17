@@ -177,14 +177,15 @@ export function clearOrders(): void {
  * Generate the next sequential order number based on stored orders.
  * e.g., if highest order is COF-2026-00003, returns COF-2026-00004.
  */
-export function getNextOrderNumber(): string {
+export function getNextOrderNumber(customPrefix?: string): string {
   const orders = getOrders();
   const currentYear = new Date().getFullYear();
-  const prefix = `COF-${currentYear}-`;
+  const prefixCode = (customPrefix || "COF").toUpperCase().trim();
+  const fullPrefix = `${prefixCode}-${currentYear}-`;
 
   let maxSequence = 0;
   for (const order of orders) {
-    if (order.orderNumber && order.orderNumber.startsWith("COF-")) {
+    if (order.orderNumber) {
       const parts = order.orderNumber.split("-");
       const seqStr = parts[parts.length - 1];
       const seq = parseInt(seqStr, 10);
@@ -195,7 +196,7 @@ export function getNextOrderNumber(): string {
   }
 
   const nextSeq = maxSequence + 1;
-  return `${prefix}${String(nextSeq).padStart(5, "0")}`;
+  return `${fullPrefix}${String(nextSeq).padStart(5, "0")}`;
 }
 
 // ----------------------------------------------------------------------

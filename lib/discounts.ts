@@ -590,15 +590,17 @@ export function calculateDiscount(
   cart: CartItem[],
   discount: Discount | null,
   customerId?: string,
-  currentTime?: number
+  currentTime?: number,
+  vatRate: number = 15
 ): DiscountCalculationResult {
+  const vatMultiplier = (typeof vatRate === "number" && !isNaN(vatRate) ? vatRate : 15) / 100;
   const subtotal = cart.reduce(
     (sum, item) => sum + item.price * item.quantity,
     0
   );
 
   if (!discount || cart.length === 0) {
-    const vat = Math.round(subtotal * 0.15 * 100) / 100;
+    const vat = Math.round(subtotal * vatMultiplier * 100) / 100;
     return {
       valid: true,
       discount: null,
@@ -619,7 +621,7 @@ export function calculateDiscount(
   });
 
   if (!validation.valid) {
-    const vat = Math.round(subtotal * 0.15 * 100) / 100;
+    const vat = Math.round(subtotal * vatMultiplier * 100) / 100;
     return {
       valid: false,
       reason: validation.reason,
@@ -652,7 +654,7 @@ export function calculateDiscount(
   }
 
   if (eligibleSubtotal <= 0) {
-    const vat = Math.round(subtotal * 0.15 * 100) / 100;
+    const vat = Math.round(subtotal * vatMultiplier * 100) / 100;
     return {
       valid: false,
       reason: "No eligible items in cart.",
@@ -685,9 +687,9 @@ export function calculateDiscount(
     Math.max(0, Math.round(computedDiscount * 100) / 100)
   );
 
-  // VAT Rule: VAT is 15% applied to Taxable Amount (Subtotal - Discount)
+  // VAT Rule: VAT is applied to Taxable Amount (Subtotal - Discount)
   const taxableAmount = Math.max(0, subtotal - discountAmount);
-  const vat = Math.round(taxableAmount * 0.15 * 100) / 100;
+  const vat = Math.round(taxableAmount * vatMultiplier * 100) / 100;
   const total = taxableAmount + vat;
 
   return {
