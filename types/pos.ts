@@ -35,6 +35,7 @@ export type CompletedOrder = {
   vat: number;
   total: number;
   customer: string;
+  customerId?: string;
   orderType: OrderType;
   payment: PaymentDetails;
   createdAt: string;

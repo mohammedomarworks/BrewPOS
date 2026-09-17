@@ -39,6 +39,7 @@ const menuItems = [
   {
     label: "Customers",
     icon: Users,
+    href: "/customers",
   },
   {
     label: "Inventory",

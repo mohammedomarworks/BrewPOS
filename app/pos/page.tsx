@@ -15,32 +15,42 @@ import {
   ClipboardList,
   LayoutDashboard,
   Coffee,
+  Users,
 } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import type { Product } from "@/data/products";
 import CheckoutModal from "@/components/pos/CheckoutModal";
+import QuickCustomerModal from "@/components/pos/QuickCustomerModal";
 import type { CartItem, OrderType } from "@/types/pos";
 import { getNextOrderNumber } from "@/lib/orders";
 import { useProductsStore, useCategoriesStore } from "@/lib/products";
+import { useCustomersStore } from "@/lib/customers";
 
 export default function POSPage() {
   const { products } = useProductsStore();
   const { categories: categoryList } = useCategoriesStore();
+  const { customers, addCustomer } = useCustomersStore();
 
   const categories = useMemo(() => {
     const activeList = categoryList.filter((c) => c.active).map((c) => c.name);
     return ["All Items", ...activeList];
   }, [categoryList]);
 
+  const activeCustomers = useMemo(() => {
+    return customers.filter((c) => c.status === "Active");
+  }, [customers]);
+
   const [selectedCategory, setSelectedCategory] = useState("All Items");
   const [search, setSearch] = useState("");
   const [cart, setCart] = useState<CartItem[]>([]);
   const [orderType, setOrderType] = useState<OrderType>("Take Away");
+  const [customerId, setCustomerId] = useState<string | undefined>(undefined);
   const [customer, setCustomer] = useState("Walk-in Customer");
   const [discountPercent, setDiscountPercent] = useState(0);
 
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
+  const [isQuickCustomerOpen, setIsQuickCustomerOpen] = useState(false);
   const [currentOrderNumber, setCurrentOrderNumber] = useState("COF-2026-00001");
 
   const handleOpenCheckout = () => {
@@ -56,6 +66,7 @@ export default function POSPage() {
     setCart([]);
     setDiscountPercent(0);
     setOrderType("Take Away");
+    setCustomerId(undefined);
     setCustomer("Walk-in Customer");
     setIsCheckoutOpen(false);
   };
@@ -155,6 +166,14 @@ export default function POSPage() {
                 >
                   <ClipboardList size={13} />
                   Orders
+                </Link>
+                <span className="text-[#cbb8a8]">/</span>
+                <Link
+                  href="/customers"
+                  className="flex items-center gap-1 rounded-md px-2 py-0.5 text-[#8c7a6c] transition hover:bg-[#efe2d5] hover:text-[#2b1b12]"
+                >
+                  <Users size={13} />
+                  Customers
                 </Link>
               </div>
             </div>
@@ -345,22 +364,46 @@ export default function POSPage() {
             </div>
             <div className="mb-5 border-b border-[#eee5dc] pb-5">
               <div className="mb-3 flex items-center justify-between">
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#9b897b]">
-                  Customer
-                </p>
+                <div className="flex items-center gap-1.5">
+                  <UserRound size={15} className="text-[#9b897b]" />
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#9b897b]">
+                    Customer
+                  </p>
+                </div>
 
-                <UserRound size={16} className="text-[#9b897b]" />
+                <button
+                  type="button"
+                  onClick={() => setIsQuickCustomerOpen(true)}
+                  className="flex items-center gap-1 rounded-lg border border-[#e5dbd0] bg-white px-2 py-1 text-[11px] font-semibold text-[#c98b5b] transition hover:bg-[#f4ece4] hover:text-[#2b1b12]"
+                >
+                  <Plus size={12} />
+                  <span>New Customer</span>
+                </button>
               </div>
 
               <select
-                value={customer}
-                onChange={(event) => setCustomer(event.target.value)}
-                className="h-11 w-full rounded-xl border border-[#e5dbd0] bg-[#faf7f3] px-3 text-sm text-[#2b1b12] outline-none focus:border-[#c98b5b]"
+                value={customerId || ""}
+                onChange={(event) => {
+                  const val = event.target.value;
+                  if (!val) {
+                    setCustomerId(undefined);
+                    setCustomer("Walk-in Customer");
+                  } else {
+                    const found = activeCustomers.find((c) => c.id === val);
+                    if (found) {
+                      setCustomerId(found.id);
+                      setCustomer(found.name);
+                    }
+                  }
+                }}
+                className="h-11 w-full rounded-xl border border-[#e5dbd0] bg-[#faf7f3] px-3 text-sm text-[#2b1b12] outline-none focus:border-[#c98b5b] cursor-pointer"
               >
-                <option>Walk-in Customer</option>
-                <option>Mohammed Omar</option>
-                <option>Shihab Hossain</option>
-                <option>Tamim Mahdi</option>
+                <option value="">Walk-in Customer</option>
+                {activeCustomers.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name} ({c.phone})
+                  </option>
+                ))}
               </select>
             </div>
             <div className="flex items-center justify-between border-b border-[#eee5dc] pb-4">
@@ -520,6 +563,7 @@ export default function POSPage() {
           cart={cart}
           orderType={orderType}
           customer={customer}
+          customerId={customerId}
           discountPercent={discountPercent}
           subtotal={subtotal}
           discount={discount}
@@ -529,6 +573,19 @@ export default function POSPage() {
           orderNumber={currentOrderNumber}
           onCompleteOrder={handleCompleteOrder}
           onNewOrder={handleNewOrder}
+        />
+      )}
+
+      {/* Quick Add Customer Modal */}
+      {isQuickCustomerOpen && (
+        <QuickCustomerModal
+          isOpen={isQuickCustomerOpen}
+          onClose={() => setIsQuickCustomerOpen(false)}
+          onSaveCustomer={addCustomer}
+          onCustomerCreated={(newCust) => {
+            setCustomerId(newCust.id);
+            setCustomer(newCust.name);
+          }}
         />
       )}
     </div>

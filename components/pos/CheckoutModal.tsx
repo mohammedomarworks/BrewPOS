@@ -29,6 +29,7 @@ interface CheckoutModalProps {
   cart: CartItem[];
   orderType: OrderType;
   customer: string;
+  customerId?: string;
   discountPercent: number;
   subtotal: number;
   discount: number;
@@ -59,6 +60,7 @@ export default function CheckoutModal({
   cart,
   orderType,
   customer,
+  customerId,
   discountPercent,
   subtotal,
   discount,
@@ -137,6 +139,7 @@ export default function CheckoutModal({
         vat,
         total,
         customer,
+        customerId: customerId || undefined,
         orderType,
         payment: {
           method: paymentMethod,
