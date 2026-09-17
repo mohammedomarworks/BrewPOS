@@ -2,14 +2,21 @@
 
 import { Search, Bell, ChevronDown, CalendarDays } from "lucide-react";
 
-export default function Topbar() {
+interface TopbarProps {
+  title?: string;
+  subtitle?: string;
+}
+
+export default function Topbar({
+  title = "Dashboard",
+  subtitle = "Welcome back to BrewPOS",
+}: TopbarProps) {
   return (
     <header className="flex h-20 items-center justify-between border-b border-[#e8dfd4] bg-white px-5 md:px-8">
-      {" "}
       {/* Left */}
       <div>
-        <h1 className="text-xl font-semibold text-[#2b1b12]">Dashboard</h1>
-        <p className="mt-1 text-sm text-[#8c7a6c]">Welcome back to BrewPOS</p>
+        <h1 className="text-xl font-semibold text-[#2b1b12]">{title}</h1>
+        <p className="mt-1 text-sm text-[#8c7a6c]">{subtitle}</p>
       </div>
       {/* Right */}
       <div className="flex items-center gap-4">

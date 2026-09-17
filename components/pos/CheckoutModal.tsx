@@ -20,6 +20,8 @@ import {
   ReceiptText,
 } from "lucide-react";
 import type { CartItem, OrderType, PaymentMethod, CompletedOrder } from "@/types/pos";
+import Receipt from "@/components/pos/Receipt";
+import { addOrder } from "@/lib/orders";
 
 interface CheckoutModalProps {
   isOpen: boolean;
@@ -150,8 +152,10 @@ export default function CheckoutModal({
           dateStyle: "medium",
           timeStyle: "short",
         }),
+        status: "Completed",
       };
 
+      addOrder(order);
       setCompletedOrder(order);
       onCompleteOrder(order);
       setIsProcessing(false);
@@ -161,87 +165,8 @@ export default function CheckoutModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/60 p-4 backdrop-blur-xs transition-opacity print:bg-white print:p-0">
-      {/* Print receipt container (hidden on screen, visible during window.print) */}
-      {completedOrder && (
-        <div className="hidden print:block print:w-full print:max-w-xs print:p-4 print:font-mono print:text-xs print:text-black">
-          <div className="text-center">
-            <h1 className="text-lg font-bold">BrewPOS Coffee Shop</h1>
-            <p className="text-[10px] text-gray-500">Premium Artisanal Coffee</p>
-            <p className="text-[10px] text-gray-500">Dhanmondi, Dhaka</p>
-            <div className="my-2 border-b border-dashed border-gray-400" />
-            <p className="font-semibold">ORDER #{completedOrder.orderNumber}</p>
-            <p className="text-[10px]">{completedOrder.createdAt}</p>
-            <p className="text-[10px]">
-              Type: {completedOrder.orderType} | Customer: {completedOrder.customer}
-            </p>
-            <div className="my-2 border-b border-dashed border-gray-400" />
-          </div>
-
-          <div className="space-y-1">
-            {completedOrder.items.map((item) => (
-              <div key={item.id} className="flex justify-between">
-                <span>
-                  {item.quantity}x {item.name}
-                </span>
-                <span>৳{(item.price * item.quantity).toFixed(2)}</span>
-              </div>
-            ))}
-          </div>
-
-          <div className="my-2 border-b border-dashed border-gray-400" />
-
-          <div className="space-y-0.5 text-right">
-            <div className="flex justify-between">
-              <span>Subtotal:</span>
-              <span>৳{completedOrder.subtotal.toFixed(2)}</span>
-            </div>
-            {completedOrder.discount > 0 && (
-              <div className="flex justify-between">
-                <span>Discount ({completedOrder.discountPercent}%):</span>
-                <span>-৳{completedOrder.discount.toFixed(2)}</span>
-              </div>
-            )}
-            <div className="flex justify-between">
-              <span>VAT (15%):</span>
-              <span>৳{completedOrder.vat.toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between font-bold text-sm">
-              <span>TOTAL:</span>
-              <span>৳{completedOrder.total.toFixed(2)}</span>
-            </div>
-          </div>
-
-          <div className="my-2 border-b border-dashed border-gray-400" />
-
-          <div className="space-y-0.5 text-[10px]">
-            <div className="flex justify-between">
-              <span>Payment:</span>
-              <span className="uppercase">{completedOrder.payment.method}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Paid:</span>
-              <span>৳{completedOrder.payment.amountReceived.toFixed(2)}</span>
-            </div>
-            {completedOrder.payment.method === "cash" && (
-              <div className="flex justify-between font-bold">
-                <span>Change:</span>
-                <span>৳{completedOrder.payment.change.toFixed(2)}</span>
-              </div>
-            )}
-            {completedOrder.payment.transactionRef && (
-              <div className="flex justify-between">
-                <span>Ref:</span>
-                <span>{completedOrder.payment.transactionRef}</span>
-              </div>
-            )}
-          </div>
-
-          <div className="mt-4 text-center text-[10px] text-gray-500">
-            <p>Thank you for choosing BrewPOS!</p>
-            <p>Please come again.</p>
-          </div>
-        </div>
-      )}
+      {/* Reusable Print receipt container (hidden on screen, visible during window.print) */}
+      {completedOrder && <Receipt order={completedOrder} variant="print-only" />}
 
       {/* Main Modal Card */}
       <div className="relative w-full max-w-4xl overflow-hidden rounded-3xl border border-[#e8dfd4] bg-white shadow-2xl transition-all print:hidden">

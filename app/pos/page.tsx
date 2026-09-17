@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import {
   Search,
   Plus,
@@ -11,6 +12,8 @@ import {
   Truck,
   UserRound,
   Percent,
+  ClipboardList,
+  LayoutDashboard,
 } from "lucide-react";
 import { useMemo, useState } from "react";
 
@@ -26,7 +29,8 @@ const categories = [
 import { products } from "@/data/products";
 import type { Product } from "@/data/products";
 import CheckoutModal from "@/components/pos/CheckoutModal";
-import type { CartItem, OrderType, CompletedOrder } from "@/types/pos";
+import type { CartItem, OrderType } from "@/types/pos";
+import { getNextOrderNumber } from "@/lib/orders";
 
 export default function POSPage() {
   const [selectedCategory, setSelectedCategory] = useState("All Items");
@@ -37,16 +41,15 @@ export default function POSPage() {
   const [discountPercent, setDiscountPercent] = useState(0);
 
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
-  const [orderCounter, setOrderCounter] = useState(1);
-  const [, setCompletedOrders] = useState<CompletedOrder[]>([]);
+  const [currentOrderNumber, setCurrentOrderNumber] = useState("COF-2026-00001");
 
-  const currentOrderNumber = useMemo(() => {
-    return `COF-2026-${String(orderCounter).padStart(5, "0")}`;
-  }, [orderCounter]);
+  const handleOpenCheckout = () => {
+    setCurrentOrderNumber(getNextOrderNumber());
+    setIsCheckoutOpen(true);
+  };
 
-  const handleCompleteOrder = (order: CompletedOrder) => {
-    setCompletedOrders((prev) => [order, ...prev]);
-    setOrderCounter((prev) => prev + 1);
+  const handleCompleteOrder = () => {
+    setCurrentOrderNumber(getNextOrderNumber());
   };
 
   const handleNewOrder = () => {
@@ -124,7 +127,27 @@ export default function POSPage() {
         {/* Header */}
         <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <p className="text-sm font-medium text-[#c98b5b]">BrewPOS</p>
+            <div className="flex items-center gap-3">
+              <p className="text-sm font-medium text-[#c98b5b]">BrewPOS</p>
+              <span className="text-xs text-[#b8a798]">&bull;</span>
+              <div className="flex items-center gap-1.5 text-xs text-[#8c7a6c]">
+                <Link
+                  href="/"
+                  className="flex items-center gap-1 rounded-md px-2 py-0.5 text-[#8c7a6c] transition hover:bg-[#efe2d5] hover:text-[#2b1b12]"
+                >
+                  <LayoutDashboard size={13} />
+                  Dashboard
+                </Link>
+                <span className="text-[#cbb8a8]">/</span>
+                <Link
+                  href="/orders"
+                  className="flex items-center gap-1 rounded-md px-2 py-0.5 text-[#8c7a6c] transition hover:bg-[#efe2d5] hover:text-[#2b1b12]"
+                >
+                  <ClipboardList size={13} />
+                  Orders
+                </Link>
+              </div>
+            </div>
 
             <h1 className="mt-1 text-2xl font-semibold text-[#2b1b12]">
               Point of Sale
@@ -437,7 +460,7 @@ export default function POSPage() {
 
               <button
                 disabled={cart.length === 0}
-                onClick={() => setIsCheckoutOpen(true)}
+                onClick={handleOpenCheckout}
                 className="mt-5 w-full rounded-xl bg-[#2b1b12] px-4 py-3.5 text-sm font-semibold text-white transition hover:bg-[#40291d] disabled:cursor-not-allowed disabled:opacity-40"
               >
                 Proceed to Checkout

@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   ShoppingCart,
@@ -17,14 +19,17 @@ const menuItems = [
   {
     label: "Dashboard",
     icon: LayoutDashboard,
+    href: "/",
   },
   {
     label: "POS",
     icon: ShoppingCart,
+    href: "/pos",
   },
   {
     label: "Orders",
     icon: ClipboardList,
+    href: "/orders",
   },
   {
     label: "Menu",
@@ -49,8 +54,17 @@ const menuItems = [
 ];
 
 export default function Sidebar() {
+  const pathname = usePathname();
+
+  const isItemActive = (href?: string) => {
+    if (!href) return false;
+    if (href === "/") return pathname === "/";
+    return pathname.startsWith(href);
+  };
+
   return (
-<aside className="hidden h-screen w-64 shrink-0 flex-col border-r border-[#e8dfd4] bg-[#2b1b12] text-white lg:flex">      {/* Brand */}
+    <aside className="hidden h-screen w-64 shrink-0 flex-col border-r border-[#e8dfd4] bg-[#2b1b12] text-white lg:flex">
+      {/* Brand */}
       <div className="border-b border-white/10 px-6 py-6">
         <div className="text-2xl font-bold tracking-wide">BrewPOS</div>
         <p className="mt-1 text-xs text-[#cbb8a8]">
@@ -67,15 +81,28 @@ export default function Sidebar() {
         <div className="space-y-1">
           {menuItems.map((item) => {
             const Icon = item.icon;
+            const active = isItemActive(item.href);
+
+            const className = `group flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm transition ${
+              active
+                ? "bg-[#c98b5b] text-white font-medium"
+                : "text-[#d5c7bb] hover:bg-white/5 hover:text-white"
+            }`;
+
+            if (item.href) {
+              return (
+                <Link key={item.label} href={item.href} className={className}>
+                  <Icon size={19} strokeWidth={1.8} />
+                  <span>{item.label}</span>
+                </Link>
+              );
+            }
 
             return (
               <button
                 key={item.label}
-                className={`group flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm transition ${
-                  item.label === "Dashboard"
-                    ? "bg-[#c98b5b] text-white"
-                    : "text-[#d5c7bb] hover:bg-white/5 hover:text-white"
-                }`}
+                type="button"
+                className={className}
               >
                 <Icon size={19} strokeWidth={1.8} />
                 <span>{item.label}</span>

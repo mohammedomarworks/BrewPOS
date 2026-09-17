@@ -8,6 +8,15 @@ export type CartItem = Product & {
 
 export type PaymentMethod = "cash" | "card" | "mobile";
 
+export type OrderStatus =
+  | "Pending"
+  | "Confirmed"
+  | "Preparing"
+  | "Ready"
+  | "Completed"
+  | "Cancelled"
+  | "Refunded";
+
 export type PaymentDetails = {
   method: PaymentMethod;
   amountReceived: number;
@@ -29,4 +38,5 @@ export type CompletedOrder = {
   orderType: OrderType;
   payment: PaymentDetails;
   createdAt: string;
+  status: OrderStatus;
 };
