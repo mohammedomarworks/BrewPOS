@@ -51,7 +51,14 @@ export default function Receipt({ order, variant = "print-only" }: ReceiptProps)
         </div>
         {order.discount > 0 && (
           <div className="flex justify-between text-neutral-700">
-            <span>Discount ({order.discountPercent}%):</span>
+            <span>
+              Discount{" "}
+              {order.discountCode
+                ? `(${order.discountCode})`
+                : order.discountPercent > 0
+                ? `(${order.discountPercent}%)`
+                : ""}:
+            </span>
             <span>-৳{order.discount.toFixed(2)}</span>
           </div>
         )}

@@ -31,6 +31,10 @@ export type CompletedOrder = {
   subtotal: number;
   discountPercent: number;
   discount: number;
+  discountId?: string;
+  discountCode?: string;
+  discountName?: string;
+  discountType?: "Percentage" | "Fixed Amount";
   taxableAmount: number;
   vat: number;
   total: number;

@@ -20,10 +20,12 @@ import {
   ReceiptText,
 } from "lucide-react";
 import type { CartItem, OrderType, PaymentMethod, CompletedOrder } from "@/types/pos";
+import type { Discount } from "@/types/discount";
 import Receipt from "@/components/pos/Receipt";
 import { addOrder } from "@/lib/orders";
 import { deductStockForOrder, checkCartStock } from "@/lib/recipes";
 import { useInventoryStore } from "@/lib/inventory-store";
+import { incrementDiscountUsage } from "@/lib/discounts";
 
 interface CheckoutModalProps {
   isOpen: boolean;
@@ -33,6 +35,7 @@ interface CheckoutModalProps {
   customer: string;
   customerId?: string;
   discountPercent: number;
+  appliedDiscount?: Discount;
   subtotal: number;
   discount: number;
   taxableAmount: number;
@@ -64,6 +67,7 @@ export default function CheckoutModal({
   customer,
   customerId,
   discountPercent,
+  appliedDiscount,
   subtotal,
   discount,
   taxableAmount,
@@ -148,6 +152,10 @@ export default function CheckoutModal({
         subtotal,
         discountPercent,
         discount,
+        discountId: appliedDiscount?.id,
+        discountCode: appliedDiscount?.code,
+        discountName: appliedDiscount?.name,
+        discountType: appliedDiscount?.type,
         taxableAmount,
         vat,
         total,
@@ -173,6 +181,9 @@ export default function CheckoutModal({
 
       addOrder(order);
       deductStockForOrder(order);
+      if (appliedDiscount?.id) {
+        incrementDiscountUsage(appliedDiscount.id);
+      }
       setCompletedOrder(order);
       onCompleteOrder(order);
       setIsProcessing(false);
@@ -269,9 +280,16 @@ export default function CheckoutModal({
                   </span>
                 </div>
 
-                {discountPercent > 0 && (
+                {discount > 0 && (
                   <div className="flex justify-between text-[#c98b5b]">
-                    <span>Discount ({discountPercent}%)</span>
+                    <span>
+                      Discount{" "}
+                      {appliedDiscount?.code
+                        ? `(${appliedDiscount.code})`
+                        : discountPercent > 0
+                        ? `(${discountPercent}%)`
+                        : ""}
+                    </span>
                     <span className="font-semibold">-৳{discount.toFixed(2)}</span>
                   </div>
                 )}
@@ -737,7 +755,14 @@ export default function CheckoutModal({
                     </div>
                     {completedOrder.discount > 0 && (
                       <div className="flex justify-between text-[#c98b5b]">
-                        <span>Discount ({completedOrder.discountPercent}%)</span>
+                        <span>
+                          Discount{" "}
+                          {completedOrder.discountCode
+                            ? `(${completedOrder.discountCode})`
+                            : completedOrder.discountPercent > 0
+                            ? `(${completedOrder.discountPercent}%)`
+                            : ""}
+                        </span>
                         <span>-৳{completedOrder.discount.toFixed(2)}</span>
                       </div>
                     )}

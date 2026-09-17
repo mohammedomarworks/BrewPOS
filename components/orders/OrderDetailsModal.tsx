@@ -336,7 +336,14 @@ export default function OrderDetailsModal({
 
                 {order.discount > 0 && (
                   <div className="flex justify-between text-[#c98b5b]">
-                    <span>Discount ({order.discountPercent}%)</span>
+                    <span>
+                      Discount{" "}
+                      {order.discountCode
+                        ? `(${order.discountCode})`
+                        : order.discountPercent > 0
+                        ? `(${order.discountPercent}%)`
+                        : ""}
+                    </span>
                     <span className="font-semibold">-৳{order.discount.toFixed(2)}</span>
                   </div>
                 )}

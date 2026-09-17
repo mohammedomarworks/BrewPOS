@@ -1,45 +1,116 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { useSyncExternalStore, useEffect } from "react";
 import type { CompletedOrder, OrderStatus } from "@/types/pos";
 
 const STORAGE_KEY = "brewpos_orders_v1";
 const ORDERS_EVENT = "brewpos:orders-updated";
 
-/**
- * Safely retrieve all orders from localStorage.
- */
-export function getOrders(): CompletedOrder[] {
-  if (typeof window === "undefined") {
-    return [];
-  }
+// ----------------------------------------------------------------------
+// In-memory Cached Snapshot & Subscriptions for useSyncExternalStore
+// ----------------------------------------------------------------------
 
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed)) {
-      return parsed;
+const initialOrders: CompletedOrder[] = [];
+let ordersSnapshot: CompletedOrder[] = initialOrders;
+let isOrdersHydrated = false;
+let lastSavedOrdersRaw: string | null = null;
+const orderSubscribers = new Set<() => void>();
+let hasAddedOrderWindowListeners = false;
+
+function notifyOrdersSubscribers(): void {
+  orderSubscribers.forEach((callback) => {
+    try {
+      callback();
+    } catch (err) {
+      console.error("Error in order subscriber callback:", err);
     }
-    return [];
-  } catch (error) {
-    console.error("Failed to read orders from localStorage:", error);
-    return [];
-  }
+  });
 }
 
 /**
- * Save orders list to localStorage and notify all listeners.
+ * Explicit client hydration from localStorage.
+ * Runs AFTER server render / client hydration to prevent SSR mismatch.
  */
-function saveOrders(orders: CompletedOrder[]): void {
-  if (typeof window === "undefined") return;
+export function hydrateOrders(): void {
+  if (typeof window === "undefined" || isOrdersHydrated) return;
+  isOrdersHydrated = true;
 
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(orders));
-    window.dispatchEvent(new CustomEvent(ORDERS_EVENT));
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) {
+      lastSavedOrdersRaw = null;
+      ordersSnapshot = initialOrders;
+      return;
+    }
+    lastSavedOrdersRaw = raw;
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      ordersSnapshot = parsed;
+      notifyOrdersSubscribers();
+    }
   } catch (error) {
-    console.error("Failed to save orders to localStorage:", error);
+    console.error("Failed to read orders from localStorage:", error);
+    ordersSnapshot = initialOrders;
   }
+}
+
+function handleOrdersSyncEvent(e?: StorageEvent | Event): void {
+  if (typeof window === "undefined") return;
+  if (e && "key" in e && e.key !== STORAGE_KEY) return;
+
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
+
+    if (raw !== lastSavedOrdersRaw) {
+      lastSavedOrdersRaw = raw;
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        ordersSnapshot = parsed;
+        notifyOrdersSubscribers();
+      }
+    }
+  } catch (err) {
+    console.error("Failed to sync orders from storage:", err);
+  }
+}
+
+function ensureOrderWindowListeners(): void {
+  if (typeof window === "undefined" || hasAddedOrderWindowListeners) return;
+  window.addEventListener(ORDERS_EVENT, handleOrdersSyncEvent);
+  window.addEventListener("storage", handleOrdersSyncEvent);
+  hasAddedOrderWindowListeners = true;
+}
+
+/**
+ * Safely retrieve all orders from the in-memory snapshot.
+ */
+export function getOrders(): CompletedOrder[] {
+  if (typeof window !== "undefined" && !isOrdersHydrated) {
+    hydrateOrders();
+  }
+  return ordersSnapshot;
+}
+
+/**
+ * Save orders list to localStorage, update in-memory snapshot, and notify all listeners.
+ */
+function saveOrders(orders: CompletedOrder[]): void {
+  ordersSnapshot = orders;
+  isOrdersHydrated = true;
+
+  if (typeof window !== "undefined") {
+    try {
+      const raw = JSON.stringify(orders);
+      lastSavedOrdersRaw = raw;
+      localStorage.setItem(STORAGE_KEY, raw);
+      window.dispatchEvent(new CustomEvent(ORDERS_EVENT));
+    } catch (error) {
+      console.error("Failed to save orders to localStorage:", error);
+    }
+  }
+
+  notifyOrdersSubscribers();
 }
 
 /**
@@ -87,13 +158,19 @@ export function updateOrderStatus(orderNumber: string, status: OrderStatus): boo
  * Clear all stored orders (useful for testing/resetting).
  */
 export function clearOrders(): void {
-  if (typeof window === "undefined") return;
-  try {
-    localStorage.removeItem(STORAGE_KEY);
-    window.dispatchEvent(new CustomEvent(ORDERS_EVENT));
-  } catch (error) {
-    console.error("Failed to clear orders:", error);
+  ordersSnapshot = initialOrders;
+  lastSavedOrdersRaw = null;
+
+  if (typeof window !== "undefined") {
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+      window.dispatchEvent(new CustomEvent(ORDERS_EVENT));
+    } catch (error) {
+      console.error("Failed to clear orders:", error);
+    }
   }
+
+  notifyOrdersSubscribers();
 }
 
 /**
@@ -121,52 +198,49 @@ export function getNextOrderNumber(): string {
   return `${prefix}${String(nextSeq).padStart(5, "0")}`;
 }
 
-// Memory cache for useSyncExternalStore reference stability
-let cachedOrders: CompletedOrder[] = [];
-let cachedRaw: string | null = null;
+// ----------------------------------------------------------------------
+// React useSyncExternalStore Hook for real-time reactivity
+// ----------------------------------------------------------------------
 
-function subscribe(callback: () => void) {
-  if (typeof window === "undefined") return () => {};
-
-  window.addEventListener(ORDERS_EVENT, callback);
-  window.addEventListener("storage", callback);
+export function subscribeOrders(callback: () => void): () => void {
+  orderSubscribers.add(callback);
+  ensureOrderWindowListeners();
+  queueMicrotask(() => {
+    hydrateOrders();
+  });
 
   return () => {
-    window.removeEventListener(ORDERS_EVENT, callback);
-    window.removeEventListener("storage", callback);
+    orderSubscribers.delete(callback);
   };
 }
 
-function getSnapshot(): CompletedOrder[] {
-  if (typeof window === "undefined") return [];
-
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw !== cachedRaw) {
-      cachedRaw = raw;
-      cachedOrders = raw ? JSON.parse(raw) : [];
-    }
-    return cachedOrders;
-  } catch {
-    return cachedOrders;
-  }
+export function getOrdersSnapshot(): CompletedOrder[] {
+  return ordersSnapshot;
 }
 
-const emptySnapshot: CompletedOrder[] = [];
-function getServerSnapshot(): CompletedOrder[] {
-  return emptySnapshot;
+export function getOrdersServerSnapshot(): CompletedOrder[] {
+  return initialOrders;
 }
 
 /**
  * React hook to subscribe to the order store reactively.
- * Handles client-side hydration and live cross-tab/cross-component updates via useSyncExternalStore.
+ * Guarantees zero SSR hydration mismatch by rendering initialOrders first,
+ * then hydrating from localStorage after mount.
  */
 export function useOrdersStore() {
-  const orders = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  const orders = useSyncExternalStore(
+    subscribeOrders,
+    getOrdersSnapshot,
+    getOrdersServerSnapshot
+  );
+
+  useEffect(() => {
+    hydrateOrders();
+  }, []);
 
   return {
     orders,
-    isLoaded: true,
+    isLoaded: isOrdersHydrated,
     addOrder,
     updateOrderStatus,
     clearOrders,

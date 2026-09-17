@@ -18,6 +18,9 @@ import {
   Users,
   Boxes,
   AlertTriangle,
+  Tag,
+  Banknote,
+  X,
 } from "lucide-react";
 import { useMemo, useState } from "react";
 
@@ -25,17 +28,26 @@ import type { Product } from "@/data/products";
 import CheckoutModal from "@/components/pos/CheckoutModal";
 import QuickCustomerModal from "@/components/pos/QuickCustomerModal";
 import type { CartItem, OrderType } from "@/types/pos";
+import type { Discount } from "@/types/discount";
 import { getNextOrderNumber } from "@/lib/orders";
 import { useProductsStore, useCategoriesStore } from "@/lib/products";
 import { useCustomersStore } from "@/lib/customers";
 import { useInventoryStore } from "@/lib/inventory-store";
 import { checkProductStock, checkCartStock } from "@/lib/recipes";
+import {
+  useDiscountsStore,
+  calculateDiscount,
+  getDiscountStatus,
+} from "@/lib/discounts";
 
 export default function POSPage() {
   const { products } = useProductsStore();
   const { categories: categoryList } = useCategoriesStore();
   const { customers, addCustomer } = useCustomersStore();
   const { ingredients } = useInventoryStore();
+  const { discounts } = useDiscountsStore();
+
+  const [currentTime] = useState(() => Date.now());
 
   const categories = useMemo(() => {
     const activeList = categoryList.filter((c) => c.active).map((c) => c.name);
@@ -52,7 +64,12 @@ export default function POSPage() {
   const [orderType, setOrderType] = useState<OrderType>("Take Away");
   const [customerId, setCustomerId] = useState<string | undefined>(undefined);
   const [customer, setCustomer] = useState("Walk-in Customer");
-  const [discountPercent, setDiscountPercent] = useState(0);
+
+  // Dynamic Discount State
+  const [appliedDiscount, setAppliedDiscount] = useState<Discount | null>(null);
+  const [couponInput, setCouponInput] = useState("");
+  const [couponError, setCouponError] = useState<string | null>(null);
+  const [showOffers, setShowOffers] = useState(false);
 
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [isQuickCustomerOpen, setIsQuickCustomerOpen] = useState(false);
@@ -75,12 +92,47 @@ export default function POSPage() {
 
   const handleNewOrder = () => {
     setCart([]);
-    setDiscountPercent(0);
+    setAppliedDiscount(null);
+    setCouponInput("");
+    setCouponError(null);
+    setShowOffers(false);
     setOrderType("Take Away");
     setCustomerId(undefined);
     setCustomer("Walk-in Customer");
     setIsCheckoutOpen(false);
   };
+
+  const handleApplyCoupon = (codeToApply?: string) => {
+    const targetCode = (codeToApply || couponInput).trim();
+    if (!targetCode) return;
+    const found = discounts.find(
+      (d) => d.code.toUpperCase() === targetCode.toUpperCase()
+    );
+    if (!found) {
+      setCouponError(`Coupon "${targetCode.toUpperCase()}" not found.`);
+      return;
+    }
+    const res = calculateDiscount(cart, found, customerId, currentTime);
+    if (!res.valid) {
+      setCouponError(res.reason || "This coupon cannot be applied.");
+      return;
+    }
+    setAppliedDiscount(found);
+    setCouponInput("");
+    setCouponError(null);
+    setShowOffers(false);
+  };
+
+  const handleRemoveDiscount = () => {
+    setAppliedDiscount(null);
+    setCouponError(null);
+  };
+
+  const activeOffers = useMemo(() => {
+    return discounts.filter(
+      (d) => getDiscountStatus(d, currentTime) === "Active"
+    );
+  }, [discounts, currentTime]);
   const filteredProducts = useMemo(() => {
     return products.filter((product) => {
       const matchesCategory =
@@ -141,10 +193,21 @@ export default function POSPage() {
     0,
   );
 
-  const discount = subtotal * (discountPercent / 100);
-  const taxableAmount = subtotal - discount;
-  const vat = taxableAmount * 0.15;
-  const total = taxableAmount + vat;
+  const discountResult = useMemo(
+    () => calculateDiscount(cart, appliedDiscount, customerId, currentTime),
+    [cart, appliedDiscount, customerId, currentTime]
+  );
+
+  const discount = discountResult.discountAmount;
+  const taxableAmount = discountResult.taxableAmount;
+  const vat = discountResult.vat;
+  const total = discountResult.total;
+  const discountPercent =
+    appliedDiscount?.type === "Percentage"
+      ? appliedDiscount.value
+      : subtotal > 0
+      ? Math.round((discount / subtotal) * 100)
+      : 0;
 
   return (
     <div className="min-h-screen bg-[#f7f3ed] p-5 md:p-8">
@@ -194,6 +257,14 @@ export default function POSPage() {
                 >
                   <Boxes size={13} />
                   Inventory
+                </Link>
+                <span className="text-[#cbb8a8]">/</span>
+                <Link
+                  href="/discounts"
+                  className="flex items-center gap-1 rounded-md px-2 py-0.5 text-[#8c7a6c] transition hover:bg-[#efe2d5] hover:text-[#2b1b12]"
+                >
+                  <Tag size={13} />
+                  Discounts
                 </Link>
               </div>
             </div>
@@ -527,29 +598,134 @@ export default function POSPage() {
             <div className="border-t border-[#eee5dc] pt-4">
               <div className="space-y-2 text-sm">
                 <div className="mb-4">
-                  <div className="mb-3 flex items-center justify-between">
-                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#9b897b]">
-                      Discount
-                    </p>
-
-                    <Percent size={15} className="text-[#9b897b]" />
-                  </div>
-
-                  <div className="grid grid-cols-4 gap-2">
-                    {[0, 5, 10, 15].map((percent) => (
+                  <div className="mb-2 flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <Tag size={14} className="text-[#9b897b]" />
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#9b897b]">
+                        Discounts & Offers
+                      </p>
+                    </div>
+                    {!appliedDiscount && activeOffers.length > 0 && (
                       <button
-                        key={percent}
-                        onClick={() => setDiscountPercent(percent)}
-                        className={`rounded-lg px-2 py-2 text-xs font-medium transition ${
-                          discountPercent === percent
-                            ? "bg-[#c98b5b] text-white"
-                            : "bg-[#f4ece4] text-[#6d4730] hover:bg-[#ead8c7]"
-                        }`}
+                        type="button"
+                        onClick={() => setShowOffers(!showOffers)}
+                        className="text-[11px] font-semibold text-[#c98b5b] hover:underline"
                       >
-                        {percent}%
+                        {showOffers ? "Hide Offers" : `Offers (${activeOffers.length})`}
                       </button>
-                    ))}
+                    )}
                   </div>
+
+                  {appliedDiscount ? (
+                    <div className="rounded-xl border border-[#c98b5b]/40 bg-[#fbf5ee] p-2.5">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#2b1b12] text-white">
+                            {appliedDiscount.type === "Percentage" ? (
+                              <Percent size={13} />
+                            ) : (
+                              <Banknote size={13} />
+                            )}
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-mono text-xs font-bold text-[#2b1b12]">
+                                {appliedDiscount.code}
+                              </span>
+                              <span className="rounded bg-[#efe2d5] px-1.5 py-0.2 text-[10px] font-bold text-[#6d4730]">
+                                {appliedDiscount.type === "Percentage"
+                                  ? `${appliedDiscount.value}% OFF`
+                                  : `৳${appliedDiscount.value} Flat`}
+                              </span>
+                            </div>
+                            <p className="text-[10px] text-[#8c7a6c] line-clamp-1">
+                              {appliedDiscount.name}
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleRemoveDiscount}
+                          title="Remove discount"
+                          className="flex h-6 w-6 items-center justify-center rounded-md border border-[#e5dbd0] bg-white text-[#8c7a6c] hover:border-red-200 hover:bg-red-50 hover:text-red-600 transition"
+                        >
+                          <X size={12} />
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5">
+                      <div className="flex gap-1.5">
+                        <input
+                          type="text"
+                          value={couponInput}
+                          onChange={(e) => {
+                            setCouponInput(e.target.value.toUpperCase());
+                            if (couponError) setCouponError(null);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              handleApplyCoupon();
+                            }
+                          }}
+                          placeholder="Enter coupon code..."
+                          className="h-9 w-full rounded-xl border border-[#e5dbd0] bg-[#faf7f3] px-3 font-mono text-xs uppercase text-[#2b1b12] outline-none placeholder:font-sans placeholder:normal-case focus:border-[#c98b5b] focus:bg-white"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleApplyCoupon()}
+                          disabled={!couponInput.trim()}
+                          className="rounded-xl bg-[#2b1b12] px-3.5 text-xs font-semibold text-white transition hover:bg-[#40291d] disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                          Apply
+                        </button>
+                      </div>
+
+                      {couponError && (
+                        <p className="text-[11px] font-medium text-red-600">
+                          {couponError}
+                        </p>
+                      )}
+
+                      {showOffers && (
+                        <div className="mt-2 max-h-36 overflow-y-auto space-y-1.5 rounded-xl border border-[#eee5dc] bg-[#faf7f3] p-2 text-xs">
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-[#9b897b]">
+                            Active Promotions
+                          </p>
+                          {activeOffers.map((o) => (
+                            <div
+                              key={o.id}
+                              onClick={() => handleApplyCoupon(o.code)}
+                              className="flex items-center justify-between rounded-lg border border-[#e5dbd0] bg-white p-2 transition cursor-pointer hover:border-[#c98b5b] hover:bg-[#faf7f3]"
+                            >
+                              <div>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="font-mono text-xs font-bold text-[#6d4730]">
+                                    {o.code}
+                                  </span>
+                                  <span className="text-[10px] font-semibold text-amber-700">
+                                    {o.type === "Percentage"
+                                      ? `${o.value}% OFF`
+                                      : `৳${o.value} OFF`}
+                                  </span>
+                                </div>
+                                <p className="text-[10px] text-[#8c7a6c] line-clamp-1">
+                                  {o.name}
+                                  {o.minimumOrderAmount
+                                    ? ` • Min ৳${o.minimumOrderAmount}`
+                                    : ""}
+                                </p>
+                              </div>
+                              <span className="rounded bg-[#f4ece4] px-1.5 py-0.5 text-[10px] font-bold text-[#6d4730]">
+                                Apply
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <div className="flex justify-between text-[#66574d]">
                   <span>Subtotal</span>
@@ -614,6 +790,7 @@ export default function POSPage() {
           customer={customer}
           customerId={customerId}
           discountPercent={discountPercent}
+          appliedDiscount={appliedDiscount || undefined}
           subtotal={subtotal}
           discount={discount}
           taxableAmount={taxableAmount}

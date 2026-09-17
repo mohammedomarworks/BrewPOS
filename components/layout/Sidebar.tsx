@@ -49,6 +49,7 @@ const menuItems = [
   {
     label: "Discounts",
     icon: Tag,
+    href: "/discounts",
   },
   {
     label: "Reports",
