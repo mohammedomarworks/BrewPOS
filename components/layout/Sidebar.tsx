@@ -34,6 +34,7 @@ const menuItems = [
   {
     label: "Menu",
     icon: Coffee,
+    href: "/menu",
   },
   {
     label: "Customers",

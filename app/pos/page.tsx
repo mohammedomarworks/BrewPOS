@@ -14,25 +14,25 @@ import {
   Percent,
   ClipboardList,
   LayoutDashboard,
+  Coffee,
 } from "lucide-react";
 import { useMemo, useState } from "react";
 
-const categories = [
-  "All Items",
-  "Hot Coffee",
-  "Cold Coffee",
-  "Tea",
-  "Bakery",
-  "Desserts",
-];
-
-import { products } from "@/data/products";
 import type { Product } from "@/data/products";
 import CheckoutModal from "@/components/pos/CheckoutModal";
 import type { CartItem, OrderType } from "@/types/pos";
 import { getNextOrderNumber } from "@/lib/orders";
+import { useProductsStore, useCategoriesStore } from "@/lib/products";
 
 export default function POSPage() {
+  const { products } = useProductsStore();
+  const { categories: categoryList } = useCategoriesStore();
+
+  const categories = useMemo(() => {
+    const activeList = categoryList.filter((c) => c.active).map((c) => c.name);
+    return ["All Items", ...activeList];
+  }, [categoryList]);
+
   const [selectedCategory, setSelectedCategory] = useState("All Items");
   const [search, setSearch] = useState("");
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -71,9 +71,11 @@ export default function POSPage() {
 
       return matchesCategory && matchesSearch;
     });
-  }, [selectedCategory, search]);
+  }, [products, selectedCategory, search]);
 
   const addToCart = (product: Product) => {
+    if (product.available === false) return;
+
     setCart((currentCart) => {
       const existingItem = currentCart.find((item) => item.id === product.id);
 
@@ -137,6 +139,14 @@ export default function POSPage() {
                 >
                   <LayoutDashboard size={13} />
                   Dashboard
+                </Link>
+                <span className="text-[#cbb8a8]">/</span>
+                <Link
+                  href="/menu"
+                  className="flex items-center gap-1 rounded-md px-2 py-0.5 text-[#8c7a6c] transition hover:bg-[#efe2d5] hover:text-[#2b1b12]"
+                >
+                  <Coffee size={13} />
+                  Menu
                 </Link>
                 <span className="text-[#cbb8a8]">/</span>
                 <Link
@@ -212,37 +222,69 @@ export default function POSPage() {
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {filteredProducts.map((product) => (
-                <button
-                  key={product.id}
-                  onClick={() => addToCart(product)}
-                  className="group rounded-2xl border border-[#e8dfd4] bg-white p-4 text-left transition hover:-translate-y-0.5 hover:border-[#d2b49b] hover:shadow-[0_8px_24px_rgba(72,48,32,0.07)]"
-                >
-                  <div className="flex aspect-[4/3] items-center justify-center rounded-xl bg-[#efe2d5] text-4xl">
-                    ☕
-                  </div>
+              {filteredProducts.map((product) => {
+                const isAvailable = product.available !== false;
 
-                  <div className="mt-4">
-                    <p className="text-xs font-medium text-[#c98b5b]">
-                      {product.category}
-                    </p>
-
-                    <h3 className="mt-1 font-semibold text-[#2b1b12]">
-                      {product.name}
-                    </h3>
-
-                    <div className="mt-3 flex items-center justify-between">
-                      <span className="font-semibold text-[#6d4730]">
-                        ৳{product.price.toFixed(2)}
-                      </span>
-
-                      <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#f4ece4] text-[#6d4730] transition group-hover:bg-[#c98b5b] group-hover:text-white">
-                        <Plus size={17} />
-                      </span>
+                return (
+                  <button
+                    key={product.id}
+                    disabled={!isAvailable}
+                    onClick={() => addToCart(product)}
+                    className={`group rounded-2xl border border-[#e8dfd4] bg-white p-4 text-left transition ${
+                      isAvailable
+                        ? "hover:-translate-y-0.5 hover:border-[#d2b49b] hover:shadow-[0_8px_24px_rgba(72,48,32,0.07)] cursor-pointer"
+                        : "opacity-60 cursor-not-allowed"
+                    }`}
+                  >
+                    <div className="relative flex aspect-[4/3] items-center justify-center rounded-xl bg-[#efe2d5] text-4xl">
+                      {product.image || "☕"}
+                      {!isAvailable && (
+                        <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-black/45 text-xs font-bold uppercase tracking-wider text-white backdrop-blur-[1px]">
+                          Out of Stock
+                        </div>
+                      )}
                     </div>
-                  </div>
-                </button>
-              ))}
+
+                    <div className="mt-4">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-medium text-[#c98b5b]">
+                          {product.category}
+                        </p>
+                        {product.popular && (
+                          <span className="text-[10px] font-semibold text-amber-600">
+                            ⭐ Popular
+                          </span>
+                        )}
+                        {product.isNew && (
+                          <span className="text-[10px] font-semibold text-blue-600">
+                            🏷️ New
+                          </span>
+                        )}
+                      </div>
+
+                      <h3 className="mt-1 font-semibold text-[#2b1b12]">
+                        {product.name}
+                      </h3>
+
+                      <div className="mt-3 flex items-center justify-between">
+                        <span className="font-semibold text-[#6d4730]">
+                          ৳{product.price.toFixed(2)}
+                        </span>
+
+                        {isAvailable ? (
+                          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#f4ece4] text-[#6d4730] transition group-hover:bg-[#c98b5b] group-hover:text-white">
+                            <Plus size={17} />
+                          </span>
+                        ) : (
+                          <span className="rounded-md bg-red-100 px-2 py-0.5 text-[11px] font-semibold text-red-700">
+                            Unavailable
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
             </div>
 
             {filteredProducts.length === 0 && (
